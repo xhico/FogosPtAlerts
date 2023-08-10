@@ -23,7 +23,8 @@ def getFogosInfo():
         return False
 
     # Get all Fogos inside Leiria District
-    districtFogos = [fogo for fogo in fogosJSON["data"] if fogo["district"] == "Leiria"]
+    districtFogos = [fogo for fogo in fogosJSON["data"]]
+    # districtFogos = [fogo for fogo in fogosJSON["data"] if fogo["district"] == "Leiria"]
 
     # Get only useful info
     usefulFogos = []
