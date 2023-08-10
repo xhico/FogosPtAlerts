@@ -1,0 +1,12 @@
+[Unit]
+Description=FogosPt Alerts Service
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/FogosPtAlerts/
+ExecStart=/usr/bin/python3 /home/pi/FogosPtAlerts/FogosPtAlerts.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
