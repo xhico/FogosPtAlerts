@@ -14,6 +14,13 @@ from Misc import get911
 
 
 def getFogosInfo():
+    """
+    Fetches and processes fire information from the Fogos API.
+
+    Returns:
+        list: A list of dictionaries containing useful fire information.
+    """
+
     logger.info("Getting Fogos JSON Info")
     # Get Fogos JSON
     fogosJSON = json.loads(requests.get("https://api-dev.fogos.pt/new/fires").content)
@@ -49,6 +56,17 @@ def getFogosInfo():
 
 
 def loadSavedFogos(savedFogosFile):
+    """
+    Load saved fire information from a JSON file.
+
+    Args:
+        savedFogosFile (str): Path to the JSON file containing saved fire information.
+
+    Returns:
+        dict: A dictionary containing the saved fire information.
+            Returns False if there's an issue loading the file.
+    """
+
     logger.info("Loading Saved Fogos JSON Info")
 
     try:
@@ -62,6 +80,17 @@ def loadSavedFogos(savedFogosFile):
 
 
 def find_new_entries(new_data, saved_data):
+    """
+    Compare new data with saved data and find entries that are not present in the saved data.
+
+    Args:
+        new_data (list): List of dictionaries containing new data entries.
+        saved_data (list): List of dictionaries containing saved data entries.
+
+    Returns:
+        list: A list of dictionaries representing new data entries that are not present in saved_data.
+    """
+
     new_entries = []
 
     for new_entry in new_data:
@@ -80,19 +109,47 @@ def find_new_entries(new_data, saved_data):
 
 
 def find_updated_entries(new_data, saved_data):
+    """
+    Compare new data with saved data and find entries with updated information.
+
+    Args:
+        new_data (list): List of dictionaries containing new data entries.
+        saved_data (list): List of dictionaries containing saved data entries.
+
+    Returns:
+        list: A list of dictionaries representing updated entries along with the updated keys and their old/new values.
+    """
+
     updated_entries = []
 
     for new_entry in new_data:
         for saved_entry in saved_data:
             if new_entry["id"] == saved_entry["id"]:
-                updated_keys = [{key: {"old": saved_entry[key], "new": new_entry[key]}} for key in new_entry if new_entry[key] != saved_entry[key]]
+                updated_keys = [
+                    {key: {"old": saved_entry[key], "new": new_entry[key]}}
+                    for key in new_entry
+                    if new_entry[key] != saved_entry[key]
+                ]
                 if updated_keys:
-                    updated_entries.append({"new_entry": new_entry, "updated_keys": updated_keys})
+                    updated_entries.append(
+                        {"new_entry": new_entry, "updated_keys": updated_keys}
+                    )
 
     return updated_entries
 
 
 def find_deleted_entries(new_data, saved_data):
+    """
+    Compare new data with saved data and find entries that are present in saved data but not in new data.
+
+    Args:
+        new_data (list): List of dictionaries containing new data entries.
+        saved_data (list): List of dictionaries containing saved data entries.
+
+    Returns:
+        list: A list of dictionaries representing entries that are present in saved_data but not in new_data.
+    """
+
     deleted_entries = []
 
     for saved_entry in saved_data:
@@ -111,6 +168,17 @@ def find_deleted_entries(new_data, saved_data):
 
 
 def translateKeys(fogo):
+    """
+    Translate keys of a fire dictionary to a new set of keys.
+
+    Args:
+        fogo (dict): A dictionary containing fire information with original keys.
+
+    Returns:
+        dict: A dictionary with translated keys.
+    """
+
+    # Translate keys and update the dictionary
     del fogo["id"]
     fogo["Data"] = fogo.pop("datetime")
     fogo["Estado"] = fogo.pop("status")
@@ -122,10 +190,22 @@ def translateKeys(fogo):
     fogo["Terrestres"] = fogo.pop("terrain")
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Natureza"] = fogo.pop("natureza")
+
     return fogo
 
 
 def haversine_distance(coord1, coord2):
+    """
+    Calculate the haversine distance between two geographical coordinates.
+
+    Args:
+        coord1 (tuple): Latitude and longitude of the first point.
+        coord2 (tuple): Latitude and longitude of the second point.
+
+    Returns:
+        float: The distance in kilometers between the two coordinates.
+    """
+
     # Coordinates are in (latitude, longitude) format
     lat1, lon1 = coord1
     lat2, lon2 = coord2
@@ -150,11 +230,34 @@ def haversine_distance(coord1, coord2):
 
 
 def is_within_distance(center, point, max_distance_km):
+    """
+    Check if a given geographical point is within a certain distance from a center point.
+
+    Args:
+        center (tuple): Latitude and longitude of the center point.
+        point (tuple): Latitude and longitude of the point to be checked.
+        max_distance_km (float): Maximum distance in kilometers.
+
+    Returns:
+        bool: True if the point is within the specified distance from the center, False otherwise.
+    """
+
     distance = haversine_distance(center, point)
     return distance <= max_distance_km
 
 
 def main():
+    """
+    Main function to monitor and send notifications for changes in fire information.
+
+    This function fetches live fire information, compares it with saved data,
+    detects new, deleted, and updated entries, and sends notification emails
+    for these changes.
+
+    Returns:
+        None
+    """
+    
     savedFogosFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fogos.json")
 
     # Get Live fogos info
