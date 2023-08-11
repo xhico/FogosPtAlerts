@@ -30,29 +30,62 @@ def getFogosInfo():
         logger.error("Failed to get Fogos JSON")
         return False
 
-    # Get all Fogos - Check if fogo is within XX kilometers of the center point (Óbidos)
-    center_point = (39.3604287420079, -9.158017598888678)
-    max_distance = 80.0
-    districtFogos = [fogo for fogo in fogosJSON["data"] if is_within_distance(center_point, (fogo["lat"], fogo["lng"]), max_distance)]
-
     # Get only useful info
     usefulFogos = []
-    for fogo in districtFogos:
-        usefulFogos.append({
-            "id": int(fogo["id"]),
-            "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
-            "status": fogo["status"],
-            "district": fogo["district"],
-            "concelho": fogo["concelho"],
-            "freguesia": fogo["freguesia"],
-            "detailLocation": fogo["detailLocation"],
-            "man": int(fogo["man"]),
-            "terrain": int(fogo["terrain"]),
-            "meios_aquaticos": int(fogo["meios_aquaticos"]),
-            "natureza": fogo["natureza"]
-        })
+    for fogo in fogosJSON["data"]:
+        distance = haversine_distance(CENTER_POINT, (fogo["lat"], fogo["lng"]))
+        if distance <= MAX_DISTANCE:
+            usefulFogos.append({
+                "id": int(fogo["id"]),
+                "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
+                "status": fogo["status"],
+                "district": fogo["district"],
+                "concelho": fogo["concelho"],
+                "freguesia": fogo["freguesia"],
+                "detailLocation": fogo["detailLocation"],
+                "distancia": distance,
+                "man": int(fogo["man"]),
+                "terrain": int(fogo["terrain"]),
+                "meios_aquaticos": int(fogo["meios_aquaticos"]),
+                "natureza": fogo["natureza"]
+            })
 
     return usefulFogos
+
+
+def haversine_distance(coord1, coord2):
+    """
+    Calculate the haversine distance between two geographical coordinates.
+
+    Args:
+        coord1 (tuple): Latitude and longitude of the first point.
+        coord2 (tuple): Latitude and longitude of the second point.
+
+    Returns:
+        float: The distance in kilometers between the two coordinates.
+    """
+
+    # Coordinates are in (latitude, longitude) format
+    lat1, lon1 = coord1
+    lat2, lon2 = coord2
+
+    # Radius of the Earth in kilometers
+    earth_radius = 6371.0
+
+    # Convert latitude and longitude from degrees to radians
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    # Haversine formula
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    distance = earth_radius * c
+
+    return round(distance, 2)
 
 
 def loadSavedFogos(savedFogosFile):
@@ -186,64 +219,38 @@ def translateKeys(fogo):
     fogo["Concelho"] = fogo.pop("concelho")
     fogo["Freguesia"] = fogo.pop("freguesia")
     fogo["Local"] = fogo.pop("detailLocation")
+    fogo["Distância (KM)"] = fogo.pop("distancia")
     fogo["Operacionais"] = fogo.pop("man")
-    fogo["Terrestres"] = fogo.pop("terrain")
+    fogo["Meios Terrestres"] = fogo.pop("terrain")
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Natureza"] = fogo.pop("natureza")
 
     return fogo
 
 
-def haversine_distance(coord1, coord2):
+def custom_capitalize(input_string):
     """
-    Calculate the haversine distance between two geographical coordinates.
+    Capitalize the first letter of each word while preserving the case of other letters.
 
     Args:
-        coord1 (tuple): Latitude and longitude of the first point.
-        coord2 (tuple): Latitude and longitude of the second point.
+        input_string (str): The input string to be processed.
 
     Returns:
-        float: The distance in kilometers between the two coordinates.
+        str: A new string with the first letter of each word capitalized while maintaining the case of the rest of the letters.
     """
 
-    # Coordinates are in (latitude, longitude) format
-    lat1, lon1 = coord1
-    lat2, lon2 = coord2
+    output_words = []
+    input_string = str(input_string)
+    words = input_string.split()
 
-    # Radius of the Earth in kilometers
-    earth_radius = 6371.0
+    for word in words:
+        if word:
+            capitalized_word = word[0].upper() + word[1:]
+            output_words.append(capitalized_word)
+        else:
+            output_words.append('')
 
-    # Convert latitude and longitude from degrees to radians
-    lat1_rad = math.radians(lat1)
-    lon1_rad = math.radians(lon1)
-    lat2_rad = math.radians(lat2)
-    lon2_rad = math.radians(lon2)
-
-    # Haversine formula
-    dlat = lat2_rad - lat1_rad
-    dlon = lon2_rad - lon1_rad
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    distance = earth_radius * c
-
-    return distance
-
-
-def is_within_distance(center, point, max_distance_km):
-    """
-    Check if a given geographical point is within a certain distance from a center point.
-
-    Args:
-        center (tuple): Latitude and longitude of the center point.
-        point (tuple): Latitude and longitude of the point to be checked.
-        max_distance_km (float): Maximum distance in kilometers.
-
-    Returns:
-        bool: True if the point is within the specified distance from the center, False otherwise.
-    """
-
-    distance = haversine_distance(center, point)
-    return distance <= max_distance_km
+    return ' '.join(output_words)
 
 
 def main():
@@ -257,7 +264,7 @@ def main():
     Returns:
         None
     """
-    
+
     savedFogosFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fogos.json")
 
     # Get Live fogos info
@@ -307,7 +314,7 @@ def main():
             subject += " - " + fogo["Freguesia"]
 
             # Construct the email body with formatted key-value pairs
-            body = "\n".join(["<b>" + str(key).capitalize() + "</b>" + " - " + str(val).capitalize() for key, val in fogo.items()])
+            body = "\n".join(["<b>" + custom_capitalize(key) + "</b>" + " - " + custom_capitalize(val) for key, val in fogo.items()])
 
             # Send the email using yagmail library
             logger.info("Send email - " + subject)
@@ -327,6 +334,7 @@ if __name__ == '__main__':
     EMAIL_USER = get911('EMAIL_USER')
     EMAIL_APPPW = get911('EMAIL_APPPW')
     EMAIL_RECEIVER = get911('EMAIL_RECEIVER')
+    CENTER_POINT, MAX_DISTANCE = (39.3604287420079, -9.158017598888678), 80.0
 
     # Main
     try:
