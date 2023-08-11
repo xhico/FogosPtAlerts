@@ -9,6 +9,7 @@ import datetime
 import json
 import requests
 import yagmail
+import math
 from Misc import get911
 
 
@@ -22,9 +23,10 @@ def getFogosInfo():
         logger.error("Failed to get Fogos JSON")
         return False
 
-    # Get all Fogos
-    locations = ["Óbidos", "Caldas da Rainha", "Leiria"]
-    districtFogos = [fogo for fogo in fogosJSON["data"] if any(location in fogo["location"] for location in locations)]
+    # Get all Fogos - Check if fogo is within XX kilometers of the center point (Óbidos)
+    center_point = (39.3604287420079, -9.158017598888678)
+    max_distance = 80.0
+    districtFogos = [fogo for fogo in fogosJSON["data"] if is_within_distance(center_point, (fogo["lat"], fogo["lng"]), max_distance)]
 
     # Get only useful info
     usefulFogos = []
@@ -121,6 +123,35 @@ def translateKeys(fogo):
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Natureza"] = fogo.pop("natureza")
     return fogo
+
+
+def haversine_distance(coord1, coord2):
+    # Coordinates are in (latitude, longitude) format
+    lat1, lon1 = coord1
+    lat2, lon2 = coord2
+
+    # Radius of the Earth in kilometers
+    earth_radius = 6371.0
+
+    # Convert latitude and longitude from degrees to radians
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    # Haversine formula
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    distance = earth_radius * c
+
+    return distance
+
+
+def is_within_distance(center, point, max_distance_km):
+    distance = haversine_distance(center, point)
+    return distance <= max_distance_km
 
 
 def main():
