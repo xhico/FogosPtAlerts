@@ -23,23 +23,20 @@ def getFogosInfo():
         return False
 
     # Get all Fogos inside Leiria District
-    districtFogos = [fogo for fogo in fogosJSON["data"]]
-    # districtFogos = [fogo for fogo in fogosJSON["data"] if fogo["district"] == "Leiria"]
+    districtFogos = [fogo for fogo in fogosJSON["data"] if fogo["district"] == "Leiria"]
 
     # Get only useful info
     usefulFogos = []
     for fogo in districtFogos:
         usefulFogos.append({
             "id": fogo["id"],
-            "created": fogo["created"]["sec"],
-            "updated": fogo["updated"]["sec"],
+            "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
             "status": fogo["status"],
             "location": fogo["location"],
             "man": fogo["man"],
             "terrain": fogo["terrain"],
             "meios_aquaticos": fogo["meios_aquaticos"],
             "natureza": fogo["natureza"],
-            "total": str(fogo["icnf"]["burnArea"]["total"]) + " HA" if "burnArea" in fogo["icnf"] else "-"
         })
 
     return usefulFogos
@@ -109,17 +106,13 @@ def find_deleted_entries(new_data, saved_data):
 
 def translateKeys(fogo):
     del fogo["id"]
-    fogo["created"] = datetime.datetime.fromtimestamp(fogo["created"]).strftime("%Y/%m/%d %H:%M")
-    fogo["updated"] = datetime.datetime.fromtimestamp(fogo["updated"]).strftime("%Y/%m/%d %H:%M")
-    fogo["Início"] = fogo.pop("created")
-    fogo["Ultima Atualização"] = fogo.pop("updated")
+    fogo["Data"] = fogo.pop("datetime")
     fogo["Estado"] = fogo.pop("status")
     fogo["Localização"] = fogo.pop("location")
     fogo["Operacionais"] = fogo.pop("man")
     fogo["Terrestres"] = fogo.pop("terrain")
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Natureza"] = fogo.pop("natureza")
-    fogo["Área Ardida"] = fogo.pop("total")
     return fogo
 
 
@@ -150,11 +143,13 @@ def main():
 
     # Send emails for changed fogos
     for typeOf, entries in changedFogos.items():
-        # Determine the subject based on the typeOf value
-        subject = "NOVO FOGO" if typeOf == "new" else "TERMINADO FOGO" if typeOf == "deleted" else "UPDATE"
 
         # Iterate through each entry of the given type
         for fogo in entries:
+
+            # Determine the subject based on the typeOf value
+            subject = "NOVO FOGO" if typeOf == "new" else "TERMINADO FOGO" if typeOf == "deleted" else "UPDATE"
+
             # Handle updated entries
             if typeOf == "updated":
                 # Iterate through updated keys in the entry
@@ -162,6 +157,7 @@ def main():
                     for key, values in updatedKey.items():
                         # Format updated values with color highlighting
                         fogo["new_entry"][key] = "<span style='color: red;font-weight: bold;'>" + str(values["old"]) + "</span>" + " / " + "<span style='color: green;font-weight: bold;'>" + str(values["new"]) + "</span>"
+
                 # Update the entry to reflect the changes
                 fogo = fogo["new_entry"]
 
@@ -172,7 +168,7 @@ def main():
             subject += " - " + fogo["Localização"]
 
             # Construct the email body with formatted key-value pairs
-            body = "\n".join(["<b>" + str(key) + "</b>" + " - " + str(val) for key, val in fogo.items()])
+            body = "\n".join(["<b>" + str(key).capitalize() + "</b>" + " - " + str(val) for key, val in fogo.items()])
 
             # Send the email using yagmail library
             logger.info("Send email - " + subject)
@@ -198,5 +194,6 @@ if __name__ == '__main__':
         main()
     except Exception as ex:
         logger.error(traceback.format_exc())
+        yagmail.SMTP(EMAIL_USER, EMAIL_APPPW).send(EMAIL_RECEIVER, "Error - " + os.path.basename(__file__), str(traceback.format_exc()))
     finally:
         logger.info("End")
