@@ -331,10 +331,16 @@ if __name__ == '__main__':
 
     logger.info("----------------------------------------------------")
 
+    # Set email settings
     EMAIL_USER = get911('EMAIL_USER')
     EMAIL_APPPW = get911('EMAIL_APPPW')
     EMAIL_RECEIVER = get911('EMAIL_RECEIVER')
-    CENTER_POINT, MAX_DISTANCE = (39.3604287420079, -9.158017598888678), 80.0
+
+    # Load Config File
+    configFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    with open(configFile, "r") as inFile:
+        config = json.loads(inFile.read())
+    CENTER_POINT, MAX_DISTANCE = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"]), config["MAX_DISTANCE"]
 
     # Main
     try:
