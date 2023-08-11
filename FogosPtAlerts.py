@@ -23,7 +23,7 @@ def getFogosInfo():
         return False
 
     # Get all Fogos
-    locations = ["Óbidos", "Caldas da Rainha"]
+    locations = ["Óbidos", "Caldas da Rainha", "Leiria"]
     districtFogos = [fogo for fogo in fogosJSON["data"] if any(location in fogo["location"] for location in locations)]
 
     # Get only useful info
@@ -33,11 +33,14 @@ def getFogosInfo():
             "id": int(fogo["id"]),
             "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
             "status": fogo["status"],
-            "location": fogo["location"],
+            "district": fogo["district"],
+            "concelho": fogo["concelho"],
+            "freguesia": fogo["freguesia"],
+            "detailLocation": fogo["detailLocation"],
             "man": int(fogo["man"]),
             "terrain": int(fogo["terrain"]),
             "meios_aquaticos": int(fogo["meios_aquaticos"]),
-            "natureza": fogo["natureza"],
+            "natureza": fogo["natureza"]
         })
 
     return usefulFogos
@@ -109,7 +112,10 @@ def translateKeys(fogo):
     del fogo["id"]
     fogo["Data"] = fogo.pop("datetime")
     fogo["Estado"] = fogo.pop("status")
-    fogo["Localização"] = fogo.pop("location")
+    fogo["Distrito"] = fogo.pop("district")
+    fogo["Concelho"] = fogo.pop("concelho")
+    fogo["Freguesia"] = fogo.pop("freguesia")
+    fogo["Local"] = fogo.pop("detailLocation")
     fogo["Operacionais"] = fogo.pop("man")
     fogo["Terrestres"] = fogo.pop("terrain")
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
@@ -164,10 +170,10 @@ def main():
             fogo = translateKeys(fogo)
 
             # Construct the email subject with the location
-            subject += " - " + fogo["Localização"]
+            subject += " - " + fogo["Freguesia"]
 
             # Construct the email body with formatted key-value pairs
-            body = "\n".join(["<b>" + str(key).capitalize() + "</b>" + " - " + str(val) for key, val in fogo.items()])
+            body = "\n".join(["<b>" + str(key).capitalize() + "</b>" + " - " + str(val).capitalize() for key, val in fogo.items()])
 
             # Send the email using yagmail library
             logger.info("Send email - " + subject)
