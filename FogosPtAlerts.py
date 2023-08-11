@@ -22,20 +22,21 @@ def getFogosInfo():
         logger.error("Failed to get Fogos JSON")
         return False
 
-    # Get all Fogos inside Leiria District
-    districtFogos = [fogo for fogo in fogosJSON["data"] if fogo["district"] == "Leiria"]
+    # Get all Fogos
+    locations = ["Óbidos", "Caldas da Rainha"]
+    districtFogos = [fogo for fogo in fogosJSON["data"] if any(location in fogo["location"] for location in locations)]
 
     # Get only useful info
     usefulFogos = []
     for fogo in districtFogos:
         usefulFogos.append({
-            "id": fogo["id"],
+            "id": int(fogo["id"]),
             "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
             "status": fogo["status"],
             "location": fogo["location"],
-            "man": fogo["man"],
-            "terrain": fogo["terrain"],
-            "meios_aquaticos": fogo["meios_aquaticos"],
+            "man": int(fogo["man"]),
+            "terrain": int(fogo["terrain"]),
+            "meios_aquaticos": int(fogo["meios_aquaticos"]),
             "natureza": fogo["natureza"],
         })
 
@@ -121,8 +122,6 @@ def main():
 
     # Get Live fogos info
     liveFogosInfo = getFogosInfo()
-    if not liveFogosInfo:
-        return
 
     # Get saved fogos info
     savedFogosInfo = loadSavedFogos(savedFogosFile)
