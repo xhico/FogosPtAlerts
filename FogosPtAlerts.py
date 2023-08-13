@@ -34,7 +34,8 @@ def getFogosInfo():
     usefulFogos = []
     for fogo in fogosJSON["data"]:
         distance = haversine_distance(CENTER_POINT, (fogo["lat"], fogo["lng"]))
-        if distance <= MAX_DISTANCE:
+        isLocation = any(loc in fogo["location"] for loc in LOCATIONS)
+        if distance <= MAX_DISTANCE or isLocation:
             usefulFogos.append({
                 "id": int(fogo["id"]),
                 "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
@@ -340,7 +341,9 @@ if __name__ == '__main__':
     configFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     with open(configFile, "r") as inFile:
         config = json.loads(inFile.read())
-    CENTER_POINT, MAX_DISTANCE = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"]), config["MAX_DISTANCE"]
+    MAX_DISTANCE = config["MAX_DISTANCE"]
+    CENTER_POINT = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"])
+    LOCATIONS = config["LOCATIONS"]
 
     # Main
     try:

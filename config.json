@@ -1,5 +1,10 @@
 {
   "MAX_DISTANCE": 50.0,
+  "LOCATIONS": [
+    "Óbidos",
+    "Caldas da Rainha",
+    "Bombarral"
+  ],
   "CENTER_POINT": {
     "LAT": 39.3604287420079,
     "LONG": -9.158017598888678
