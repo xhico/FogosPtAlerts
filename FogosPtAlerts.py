@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # !/usr/bin/python3
 
+# python3 -m pip install requests yagmail --no-cache-dir
 
 import logging
 import os
