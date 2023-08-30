@@ -9,7 +9,7 @@ import json
 import requests
 import yagmail
 import math
-from Misc import get911
+from Misc import get911, sendErrorEmail
 
 
 def getFogosInfo():
@@ -212,7 +212,6 @@ def translateKeys(fogo):
     """
 
     # Translate keys and update the dictionary
-    del fogo["id"]
     fogo["Data"] = fogo.pop("datetime")
     fogo["Estado"] = fogo.pop("status")
     fogo["Distrito"] = fogo.pop("district")
@@ -311,7 +310,7 @@ def main():
             fogo = translateKeys(fogo)
 
             # Construct the email subject with the location
-            subject += " - " + fogo["Freguesia"]
+            subject += " | " + fogo["Freguesia"] + " | " + fogo["id"]
 
             # Construct the email body with formatted key-value pairs
             body = "\n".join(["<b>" + custom_capitalize(key) + "</b>" + " - " + custom_capitalize(val) for key, val in fogo.items()])
@@ -349,6 +348,6 @@ if __name__ == '__main__':
         main()
     except Exception as ex:
         logger.error(traceback.format_exc())
-        yagmail.SMTP(EMAIL_USER, EMAIL_APPPW).send(EMAIL_RECEIVER, "Error - " + os.path.basename(__file__), str(traceback.format_exc()))
+        sendErrorEmail(os.path.basename(__file__), str(traceback.format_exc()))
     finally:
         logger.info("End")
