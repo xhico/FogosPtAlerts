@@ -88,30 +88,6 @@ def haversine_distance(coord1, coord2):
     return round(distance, 2)
 
 
-def loadSavedFogos(savedFogosFile):
-    """
-    Load saved fire information from a JSON file.
-
-    Args:
-        savedFogosFile (str): Path to the JSON file containing saved fire information.
-
-    Returns:
-        dict: A dictionary containing the saved fire information.
-            Returns False if there's an issue loading the file.
-    """
-
-    logger.info("Loading Saved Fogos JSON Info")
-
-    try:
-        with open(savedFogosFile, "r") as inFile:
-            savedFogosInfo = json.loads(inFile.read())
-    except Exception as ex:
-        logger.warning("Failed to load savedFogosFile")
-        return False
-
-    return savedFogosInfo
-
-
 def find_new_entries(new_data, saved_data):
     """
     Compare new data with saved data and find entries that are not present in the saved data.
@@ -264,26 +240,18 @@ def main():
         None
     """
 
-    savedFogosFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fogos.json")
-
     # Get Live fogos info
     liveFogosInfo = getFogosInfo()
 
-    # Get saved fogos info
-    savedFogosInfo = loadSavedFogos(savedFogosFile)
-    savedFogosInfo = liveFogosInfo if not savedFogosInfo else savedFogosInfo
-
     # Save liveFogosInfo
-    if os.path.exists(savedFogosFile):
-        os.remove(savedFogosFile)
-    with open(savedFogosFile, "w") as outFile:
-        json.dump(liveFogosInfo, outFile, indent=2)
+    with open(configFile, "w") as outFile:
+        json.dump(config, outFile, indent=2)
 
     # Get differences
     logger.info("Getting differences between live and saved JSON")
-    new_entries = find_new_entries(liveFogosInfo, savedFogosInfo)
-    deleted_entries = find_deleted_entries(liveFogosInfo, savedFogosInfo)
-    updated_entries = find_updated_entries(liveFogosInfo, savedFogosInfo)
+    new_entries = find_new_entries(liveFogosInfo, SAVED_FOGOS)
+    deleted_entries = find_deleted_entries(liveFogosInfo, SAVED_FOGOS)
+    updated_entries = find_updated_entries(liveFogosInfo, SAVED_FOGOS)
     changedFogos = {"new": new_entries, "deleted": deleted_entries, "updated": updated_entries}
 
     # Send emails for changed fogos
@@ -342,6 +310,7 @@ if __name__ == '__main__':
     MAX_DISTANCE = config["MAX_DISTANCE"]
     CENTER_POINT = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"])
     LOCATIONS = config["LOCATIONS"]
+    SAVED_FOGOS = config["SAVED_FOGOS"]
 
     # Main
     try:
