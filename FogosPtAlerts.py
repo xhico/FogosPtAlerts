@@ -244,8 +244,8 @@ def main():
     liveFogosInfo = getFogosInfo()
 
     # Save liveFogosInfo
-    with open(configFile, "w") as outFile:
-        json.dump(config, outFile, indent=2)
+    with open(savedInfoFile, "w") as outFile:
+        json.dump(saved_info, outFile, indent=2)
 
     # Get differences
     logger.info("Getting differences between live and saved JSON")
@@ -310,7 +310,12 @@ if __name__ == '__main__':
     MAX_DISTANCE = config["MAX_DISTANCE"]
     CENTER_POINT = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"])
     LOCATIONS = config["LOCATIONS"]
-    SAVED_FOGOS = config["SAVED_FOGOS"]
+
+    # Load saved_info File
+    savedInfoFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_info.json")
+    with open(savedInfoFile, "r") as inFile:
+        saved_info = json.loads(inFile.read())
+    SAVED_FOGOS = saved_info["SAVED_FOGOS"]
 
     # Main
     try:
