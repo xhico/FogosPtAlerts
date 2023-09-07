@@ -245,7 +245,7 @@ def main():
 
     # Save liveFogosInfo
     with open(savedInfoFile, "w") as outFile:
-        json.dump(saved_info, outFile, indent=2)
+        json.dump(SAVED_FOGOS, outFile, indent=2)
 
     # Get differences
     logger.info("Getting differences between live and saved JSON")
@@ -313,9 +313,11 @@ if __name__ == '__main__':
 
     # Load saved_info File
     savedInfoFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_info.json")
+    if not os.path.exists(savedInfoFile):
+        with open(savedInfoFile, "w") as outFile:
+            json.dump([], outFile, indent=2)
     with open(savedInfoFile, "r") as inFile:
-        saved_info = json.loads(inFile.read())
-    SAVED_FOGOS = saved_info["SAVED_FOGOS"]
+        SAVED_FOGOS = json.loads(inFile.read())
 
     # Main
     try:
