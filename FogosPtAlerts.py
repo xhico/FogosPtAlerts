@@ -7,9 +7,8 @@ import traceback
 import datetime
 import json
 import requests
-import yagmail
 import math
-from Misc import get911, sendErrorEmail
+from Misc import get911, sendEmail
 
 
 def getFogosInfo():
@@ -285,7 +284,7 @@ def main():
 
             # Send the email using yagmail library
             logger.info("Send email - " + subject)
-            yagmail.SMTP(EMAIL_USER, EMAIL_APPPW).send(EMAIL_RECEIVER, subject, body)
+            sendEmail(subject, body)
 
     return
 
@@ -324,6 +323,6 @@ if __name__ == '__main__':
         main()
     except Exception as ex:
         logger.error(traceback.format_exc())
-        sendErrorEmail(os.path.basename(__file__), str(traceback.format_exc()))
+        sendEmail(os.path.basename(__file__), str(traceback.format_exc()))
     finally:
         logger.info("End")
