@@ -199,6 +199,9 @@ def translateKeys(fogo):
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Natureza"] = fogo.pop("natureza")
 
+    # Convert every value to str
+    fogo = {key: str(value) for key, value in fogo.items()}
+
     return fogo
 
 
@@ -244,7 +247,7 @@ def main():
 
     # Save liveFogosInfo
     with open(savedInfoFile, "w") as outFile:
-        json.dump(SAVED_FOGOS, outFile, indent=2)
+        json.dump(liveFogosInfo, outFile, indent=2)
 
     # Get differences
     logger.info("Getting differences between live and saved JSON")
