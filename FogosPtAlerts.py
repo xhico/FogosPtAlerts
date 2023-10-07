@@ -300,11 +300,6 @@ if __name__ == '__main__':
 
     logger.info("----------------------------------------------------")
 
-    # Set email settings
-    EMAIL_USER = get911('EMAIL_USER')
-    EMAIL_APPPW = get911('EMAIL_APPPW')
-    EMAIL_RECEIVER = get911('EMAIL_RECEIVER')
-
     # Load Config File
     configFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     with open(configFile, "r") as inFile:
