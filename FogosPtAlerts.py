@@ -198,6 +198,7 @@ def translateKeys(fogo):
     fogo["Meios Terrestres"] = fogo.pop("terrain")
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Natureza"] = fogo.pop("natureza")
+    fogo["URL"] = "https://fogos.pt/fogo/" + str(fogo["id"]) + "/detalhe"
 
     # Convert every value to str
     fogo = {key: str(value) for key, value in fogo.items()}
