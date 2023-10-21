@@ -284,7 +284,7 @@ def main():
             subject += " | " + fogo["Freguesia"] + " | " + fogo["id"]
 
             # Construct the email body with formatted key-value pairs
-            body = "\n".join(["<b>" + custom_capitalize(key) + "</b>" + " - " + custom_capitalize(val) if not val.statswith("https") else val for key, val in fogo.items()])
+            body = "\n".join(["<b>" + custom_capitalize(key) + "</b>" + " - " + custom_capitalize(val) if not val.startswith("https") else val for key, val in fogo.items()])
 
             # Send the email using yagmail library
             logger.info("Send email - " + subject)
