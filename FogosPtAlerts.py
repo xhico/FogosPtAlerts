@@ -46,6 +46,7 @@ def getFogosInfo():
                 "man": int(fogo["man"]),
                 "terrain": int(fogo["terrain"]),
                 "meios_aquaticos": int(fogo["meios_aquaticos"]),
+                "aerial": int(fogo["aerial"]),
                 "natureza": fogo["natureza"]
             })
 
@@ -197,6 +198,7 @@ def translateKeys(fogo):
     fogo["Operacionais"] = fogo.pop("man")
     fogo["Meios Terrestres"] = fogo.pop("terrain")
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
+    fogo["Meios Aéreos"] = fogo.pop("aerial")
     fogo["Natureza"] = fogo.pop("natureza")
     fogo["URL"] = "https://fogos.pt/fogo/" + str(fogo["id"]) + "/detalhe"
 
