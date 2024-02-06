@@ -188,6 +188,8 @@ def translateKeys(fogo):
     """
 
     # Translate keys and update the dictionary
+    fogo["Tipo de Alerta"] = fogo.pop("alertType")
+    fogo["ID"] = fogo.pop("id")
     fogo["Data"] = fogo.pop("datetime")
     fogo["Estado"] = fogo.pop("status")
     fogo["Distrito"] = fogo.pop("district")
@@ -200,7 +202,7 @@ def translateKeys(fogo):
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Meios Aéreos"] = fogo.pop("aerial")
     fogo["Natureza"] = fogo.pop("natureza")
-    fogo["URL"] = "https://fogos.pt/fogo/" + str(fogo["id"]) + "/detalhe"
+    fogo["URL"] = "https://fogos.pt/fogo/" + str(fogo["ID"]) + "/detalhe"
 
     # Convert every value to str
     fogo = {key: str(value) for key, value in fogo.items()}
@@ -265,9 +267,6 @@ def main():
         # Iterate through each entry of the given type
         for fogo in entries:
 
-            # Determine the subject based on the typeOf value
-            subject = "NOVO FOGO" if typeOf == "new" else "TERMINADO FOGO" if typeOf == "deleted" else "UPDATE"
-
             # Handle updated entries
             if typeOf == "updated":
                 # Iterate through updated keys in the entry
@@ -280,10 +279,11 @@ def main():
                 fogo = fogo["new_entry"]
 
             # Translate dictionary keys using the translateKeys function
+            fogo["alertType"] = "NOVO" if typeOf == "new" else "TERMINADO" if typeOf == "deleted" else "UPDATE"
             fogo = translateKeys(fogo)
 
-            # Construct the email subject with the location
-            subject += " | " + fogo["Freguesia"] + " | " + fogo["id"]
+            # Determine the subject based on the typeOf value
+            subject = "FOGO | " + fogo["Freguesia"] + " | " + fogo["ID"]
 
             # Construct the email body with formatted key-value pairs
             body = "\n".join(["<b>" + custom_capitalize(key) + "</b>" + " - " + custom_capitalize(val) if not val.startswith("https") else val for key, val in fogo.items()])
