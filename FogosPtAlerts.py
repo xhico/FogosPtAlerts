@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 # !/usr/bin/python3
 
-import logging
-import os
-import traceback
 import datetime
 import json
-import requests
+import logging
 import math
-from Misc import get911, sendEmail
+import os
+import traceback
+
+import requests
+from Misc import sendEmail
 
 
 def getFogosInfo():
@@ -36,7 +37,7 @@ def getFogosInfo():
         if distance <= MAX_DISTANCE or isLocation:
             usefulFogos.append({
                 "id": int(fogo["id"]),
-                "datetime": datetime.datetime.strptime(fogo["date"] + " " + fogo["hour"], "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
+                "datetime": datetime.datetime.strptime(f"{fogo['date']} {fogo['hour']}", "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
                 "status": fogo["status"],
                 "district": fogo["district"],
                 "concelho": fogo["concelho"],
@@ -202,7 +203,7 @@ def translateKeys(fogo):
     fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
     fogo["Meios Aéreos"] = fogo.pop("aerial")
     fogo["Natureza"] = fogo.pop("natureza")
-    fogo["URL"] = "https://fogos.pt/fogo/" + str(fogo["ID"]) + "/detalhe"
+    fogo["URL"] = f"https://fogos.pt/fogo/{fogo['ID']}/detalhe?t={int(datetime.datetime.now().timestamp())}"
 
     # Convert every value to str
     fogo = {key: str(value) for key, value in fogo.items()}
@@ -273,7 +274,7 @@ def main():
                 for updatedKey in fogo["updated_keys"]:
                     for key, values in updatedKey.items():
                         # Format updated values with color highlighting
-                        fogo["new_entry"][key] = "<span style='color: red;font-weight: bold;'>" + str(values["old"]) + "</span>" + " / " + "<span style='color: green;font-weight: bold;'>" + str(values["new"]) + "</span>"
+                        fogo["new_entry"][key] = f"<span style='color: red;font-weight: bold;'>{values['old']}</span> / <span style='color: green;font-weight: bold;'>{values['new']}</span>"
 
                 # Update the entry to reflect the changes
                 fogo = fogo["new_entry"]
@@ -283,16 +284,14 @@ def main():
             fogo = translateKeys(fogo)
 
             # Determine the subject based on the typeOf value
-            subject = "FOGO | " + fogo["Freguesia"] + " | " + fogo["ID"]
+            subject = f"FOGO | {fogo['Freguesia']} | {fogo['ID']}"
 
             # Construct the email body with formatted key-value pairs
-            body = "\n".join(["<b>" + custom_capitalize(key) + "</b>" + " - " + custom_capitalize(val) if not val.startswith("https") else val for key, val in fogo.items()])
+            body = "\n".join([f"<b>{custom_capitalize(key)}</b> - {custom_capitalize(val) if not val.startswith('https') else val}" for key, val in fogo.items()])
 
             # Send the email using yagmail library
-            logger.info("Send email - " + subject)
+            logger.info(f"Send email - {subject}")
             sendEmail(subject, body)
-
-    return
 
 
 if __name__ == '__main__':
