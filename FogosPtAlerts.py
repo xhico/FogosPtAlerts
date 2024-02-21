@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import random
 import traceback
 
 import requests
@@ -286,8 +287,17 @@ def main():
             # Determine the subject based on the typeOf value
             subject = f"FOGO | {fogo['Freguesia']} | {fogo['ID']}"
 
-            # Construct the email body with formatted key-value pairs
-            body = "\n".join([f"<b>{custom_capitalize(key)}</b> - {custom_capitalize(val) if not val.startswith('https') else val}" for key, val in fogo.items()])
+            # Iterate over each key-value pair in the dictionary fogo
+            formatted_strings = []
+            for key, val in fogo.items():
+                formatted_key = custom_capitalize(key)
+                formatted_val = custom_capitalize(val) if not val.startswith('https') else val
+                random_color = random.randint(0, 10)
+                formatted_string = f"<b>{formatted_key}</b> - {formatted_val}<span style='color:#ffffff'>{random_color}</span>"
+                formatted_strings.append(formatted_string)
+
+            # Join all formatted strings with newline character '\n'
+            body = "\n".join(formatted_strings)
 
             # Send the email using yagmail library
             logger.info(f"Send email - {subject}")
