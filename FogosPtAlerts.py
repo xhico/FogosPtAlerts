@@ -282,22 +282,22 @@ def main():
 
             # Translate dictionary keys using the translateKeys function
             fogo["alertType"] = "NOVO" if typeOf == "new" else "TERMINADO" if typeOf == "deleted" else "UPDATE"
+            fogo["alertType"] = f"<b style='color: red'>{fogo['alertType']}</b>"
             fogo = translateKeys(fogo)
 
             # Determine the subject based on the typeOf value
             subject = f"FOGO | {fogo['Freguesia']} | {fogo['ID']}"
 
             # Iterate over each key-value pair in the dictionary fogo
-            formatted_strings = []
+            body = []
             for key, val in fogo.items():
-                formatted_key = custom_capitalize(key)
-                formatted_val = custom_capitalize(val) if not val.startswith('https') else val
-                random_color = random.randint(0, 10)
-                formatted_string = f"<b>{formatted_key}</b> - {formatted_val}<span style='color:#ffffff'>{random_color}</span>"
-                formatted_strings.append(formatted_string)
+                key = custom_capitalize(key)
+                val = custom_capitalize(val) if not val.startswith('https') else val
+                line = f"<b>{key}</b> - {val}<span style='color:#ffffff'>{random.randint(0, 10)}</span>"
+                body.append(line)
 
             # Join all formatted strings with newline character '\n'
-            body = "\n".join(formatted_strings)
+            body = "\n".join(body)
 
             # Send the email using yagmail library
             logger.info(f"Send email - {subject}")
