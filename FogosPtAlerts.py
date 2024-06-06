@@ -9,9 +9,8 @@ import os
 import random
 import traceback
 
+import Misc
 import requests
-
-from Misc import sendEmail
 
 
 def getFogosInfo():
@@ -302,7 +301,7 @@ def main():
 
             # Send the email using yagmail library
             logger.info(f"Send email - {subject}")
-            sendEmail(subject, body)
+            Misc.sendEmail(subject, body)
 
 
 if __name__ == '__main__':
@@ -334,6 +333,6 @@ if __name__ == '__main__':
         main()
     except Exception as ex:
         logger.error(traceback.format_exc())
-        sendEmail(os.path.basename(__file__), str(traceback.format_exc()))
+        Misc.sendEmail(os.path.basename(__file__), str(traceback.format_exc()))
     finally:
         logger.info("End")
