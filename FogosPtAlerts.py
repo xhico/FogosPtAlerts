@@ -288,8 +288,7 @@ def main():
 
             # Determine the subject based on the typeOf value
             pattern = r"<span[^>]*>(.*?)<\/span>.*?<span[^>]*>(.*?)<\/span>"
-            fogo['Freguesia'] = re.search(pattern, fogo['Freguesia']).group(2) if "span" in fogo['Freguesia'] else fogo['Freguesia']
-            subject = f"FOGO | {fogo['Freguesia']} | {fogo['ID']}"
+            subject = f"FOGO | {re.search(pattern, fogo['Freguesia']).group(2) if 'span' in fogo['Freguesia'] else fogo['Freguesia']} | {fogo['ID']}"
 
             # Iterate over each key-value pair in the dictionary fogo
             body = []
