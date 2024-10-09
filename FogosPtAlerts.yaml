@@ -4,7 +4,7 @@ services:
   fogosptalerts:
     container_name: "fogosptalerts"
     image: "fogosptalerts:latest"
-    hostname: "-"
+    hostname: "fogosptalerts.docker"
     restart: "unless-stopped"
     volumes:
       - "${BASE_DIR}/FogosPtAlerts/FogosPtAlerts.py:/root/FogosPtAlerts/FogosPtAlerts.py"
