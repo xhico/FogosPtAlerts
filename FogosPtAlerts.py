@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # !/usr/bin/python3
-
+import ast
 import datetime
 import json
 import logging
@@ -330,7 +330,7 @@ def main():
             logger.info(f"Send email - {subject}")
             response = send_email_via_api(
                 api_url=EMAIL_SENDER_API_URL,
-                to=["francgf@gmail.com"],
+                to=EMAIL_SENDER_TO,
                 subject=subject,
                 html_message="\n".join(body)
             )
@@ -342,8 +342,6 @@ if __name__ == '__main__':
     LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{os.path.abspath(__file__).replace('.py', '.log')}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()])
     logger = logging.getLogger()
-
-    logger.info("----------------------------------------------------")
 
     # Load Config File
     configFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -364,11 +362,22 @@ if __name__ == '__main__':
     # Set EMAIL_SENDER_API_URL
     EMAIL_SENDER_API_URL = "http://10.10.10.13:5500/send-email"
 
+    # Get the environment variable EMAIL_SENDER_TO
+    email_sender_to_raw = os.getenv("EMAIL_SENDER_TO", "['francgf@gmail.com']")
+    try:
+        EMAIL_SENDER_TO = ast.literal_eval(email_sender_to_raw)
+        if not isinstance(EMAIL_SENDER_TO, list):
+            raise ValueError("EMAIL_SENDER_TO is not a list.")
+    except (ValueError, SyntaxError) as e:
+        logger.error(f"Invalid EMAIL_SENDER_TO format: {e}")
+        EMAIL_SENDER_TO = ["francgf@gmail.com"]
+
     # Main
     while True:
+        logger.info("----------------------------------------------------")
         try:
             main()
         except Exception as e:
             logger.exception(e)
         finally:
-            time.sleep(1 * 60 * 1000)  # 1 min
+            time.sleep(1 * 60)  # 1 min

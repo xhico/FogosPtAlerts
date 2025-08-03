@@ -6,3 +6,5 @@ services:
     image: "fogosptalerts:latest"
     hostname: "fogosptalerts.docker"
     restart: "unless-stopped"
+    environment:
+      - "EMAIL_SENDER_TO=['francgf@gmail.com', 'milenereis90@gmail.com']"
