@@ -8,10 +8,38 @@ import math
 import os
 import random
 import re
-import traceback
+import time
 
-import Misc
 import requests
+
+
+def send_email_via_api(api_url, to, subject, html_message, attachments=None):
+    """
+    Sends a POST request to the email-sending API with email details.
+
+    Args:
+        api_url (str): Full URL to the /send-email endpoint (e.g. http://10.10.10.13:5000/send-email)
+        to (list[str]): List of recipient email addresses
+        subject (str): Email subject
+        html_message (str): HTML content of the email
+        attachments (list[dict], optional): List of attachments as dicts with 'filename', 'mimetype', and base64 'content'
+
+    Returns:
+        dict: Response JSON from the API
+    """
+    payload = {
+        "to": to,
+        "subject": subject,
+        "message": html_message,
+        "attachments": attachments or []
+    }
+
+    try:
+        response = requests.post(api_url, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e)}
 
 
 def getFogosInfo():
@@ -298,12 +326,15 @@ def main():
                 line = f"<b>{key}</b> - {val}<span style='color:#ffffff'>{random.randint(0, 10)}</span>"
                 body.append(line)
 
-            # Join all formatted strings with newline character '\n'
-            body = "\n".join(body)
-
             # Send the email using yagmail library
             logger.info(f"Send email - {subject}")
-            Misc.sendEmail(subject, body)
+            response = send_email_via_api(
+                api_url=EMAIL_SENDER_API_URL,
+                to=["francgf@gmail.com"],
+                subject=subject,
+                html_message="\n".join(body)
+            )
+            logger.info(response)
 
 
 if __name__ == '__main__':
@@ -330,11 +361,14 @@ if __name__ == '__main__':
     with open(savedInfoFile, "r") as inFile:
         SAVED_FOGOS = json.loads(inFile.read())
 
+    # Set EMAIL_SENDER_API_URL
+    EMAIL_SENDER_API_URL = "http://10.10.10.13:5500/send-email"
+
     # Main
-    try:
-        main()
-    except Exception as ex:
-        logger.error(traceback.format_exc())
-        Misc.sendEmail(os.path.basename(__file__), str(traceback.format_exc()))
-    finally:
-        logger.info("End")
+    while True:
+        try:
+            main()
+        except Exception as e:
+            logger.exception(e)
+        finally:
+            time.sleep(1 * 60 * 1000)  # 1 min

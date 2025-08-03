@@ -6,8 +6,3 @@ services:
     image: "fogosptalerts:latest"
     hostname: "fogosptalerts.docker"
     restart: "unless-stopped"
-    volumes:
-      - "${BASE_DIR}/FogosPtAlerts/FogosPtAlerts.py:/root/FogosPtAlerts/FogosPtAlerts.py"
-      - "${BASE_DIR}/FogosPtAlerts/FogosPtAlerts.log:/root/FogosPtAlerts/FogosPtAlerts.log"
-      - "${BASE_DIR}/FogosPtAlerts/config.json:/root/FogosPtAlerts/config.json"
-      - "${BASE_DIR}/FogosPtAlerts/saved_info.json:/root/FogosPtAlerts/saved_info.json"
