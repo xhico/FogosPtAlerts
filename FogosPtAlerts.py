@@ -370,8 +370,8 @@ if __name__ == '__main__':
             raise ValueError("EMAIL_SENDER_TO is not a list.")
     except (ValueError, SyntaxError) as e:
         logger.error(f"Invalid EMAIL_SENDER_TO format: {e}")
-        EMAIL_SENDER_TO = ["francgf@gmail.com"]
-
+        exit()
+        
     # Main
     while True:
         logger.info("----------------------------------------------------")
