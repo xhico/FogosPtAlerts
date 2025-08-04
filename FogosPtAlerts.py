@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # !/usr/bin/python3
+
 import ast
 import datetime
 import json
@@ -11,6 +12,14 @@ import re
 import time
 
 import requests
+
+
+def loadSavedInfo():
+    if not os.path.exists(savedInfoFile):
+        with open(savedInfoFile, "w") as outFile:
+            json.dump([], outFile, indent=2)
+    with open(savedInfoFile, "r") as inFile:
+        return json.loads(inFile.read())
 
 
 def send_email_via_api(api_url, to, subject, html_message, attachments=None):
@@ -278,6 +287,9 @@ def main():
         None
     """
 
+    # Load Saved Fogos
+    saved_fogos = loadSavedInfo()
+
     # Get Live fogos info
     liveFogosInfo = getFogosInfo()
 
@@ -287,9 +299,9 @@ def main():
 
     # Get differences
     logger.info("Getting differences between live and saved JSON")
-    new_entries = find_new_entries(liveFogosInfo, SAVED_FOGOS)
-    deleted_entries = find_deleted_entries(liveFogosInfo, SAVED_FOGOS)
-    updated_entries = find_updated_entries(liveFogosInfo, SAVED_FOGOS)
+    new_entries = find_new_entries(liveFogosInfo, saved_fogos)
+    deleted_entries = find_deleted_entries(liveFogosInfo, saved_fogos)
+    updated_entries = find_updated_entries(liveFogosInfo, saved_fogos)
     changedFogos = {"new": new_entries, "deleted": deleted_entries, "updated": updated_entries}
 
     # Send emails for changed fogos
@@ -332,7 +344,7 @@ def main():
                 api_url=EMAIL_SENDER_API_URL,
                 to=EMAIL_SENDER_TO,
                 subject=subject,
-                html_message="\n".join(body)
+                html_message="<br>".join(body)
             )
             logger.info(response)
 
@@ -345,19 +357,13 @@ if __name__ == '__main__':
 
     # Load Config File
     configFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-    with open(configFile, "r") as inFile:
-        config = json.loads(inFile.read())
+    config = json.load(open(configFile))
     MAX_DISTANCE = config["MAX_DISTANCE"]
     CENTER_POINT = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"])
     LOCATIONS = config["LOCATIONS"]
 
     # Load saved_info File
     savedInfoFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_info.json")
-    if not os.path.exists(savedInfoFile):
-        with open(savedInfoFile, "w") as outFile:
-            json.dump([], outFile, indent=2)
-    with open(savedInfoFile, "r") as inFile:
-        SAVED_FOGOS = json.loads(inFile.read())
 
     # Set EMAIL_SENDER_API_URL
     EMAIL_SENDER_API_URL = "http://10.10.10.13:5500/send-email"
@@ -371,7 +377,7 @@ if __name__ == '__main__':
     except (ValueError, SyntaxError) as e:
         logger.error(f"Invalid EMAIL_SENDER_TO format: {e}")
         exit()
-        
+
     # Main
     while True:
         logger.info("----------------------------------------------------")
