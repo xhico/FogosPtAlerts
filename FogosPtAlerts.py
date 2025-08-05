@@ -342,7 +342,7 @@ def main():
             logger.info(f"Send email - {subject}")
             response = send_email_via_api(
                 api_url=EMAIL_SENDER_API_URL,
-                to=EMAIL_SENDER_TO,
+                to=FOGOS_EMAIL_SENDER_TO,
                 subject=subject,
                 html_message="<br>".join(body)
             )
@@ -368,15 +368,16 @@ if __name__ == '__main__':
     # Set EMAIL_SENDER_API_URL
     EMAIL_SENDER_API_URL = "http://10.10.10.13:5500/send-email"
 
-    # Get the environment variable EMAIL_SENDER_TO
-    email_sender_to_raw = os.getenv("EMAIL_SENDER_TO", "['francgf@gmail.com']")
+    # Get the environment variable FOGOS_EMAIL_SENDER_TO
+    FOGOS_EMAIL_SENDER_TO_raw = os.getenv("FOGOS_EMAIL_SENDER_TO", "['francgf@gmail.com']")
     try:
-        EMAIL_SENDER_TO = ast.literal_eval(email_sender_to_raw)
-        if not isinstance(EMAIL_SENDER_TO, list):
-            raise ValueError("EMAIL_SENDER_TO is not a list.")
+        FOGOS_EMAIL_SENDER_TO = ast.literal_eval(FOGOS_EMAIL_SENDER_TO_raw)
+        if not isinstance(FOGOS_EMAIL_SENDER_TO, list):
+            raise ValueError("FOGOS_EMAIL_SENDER_TO is not a list.")
     except (ValueError, SyntaxError) as e:
-        logger.error(f"Invalid EMAIL_SENDER_TO format: {e}")
+        logger.error(f"Invalid FOGOS_EMAIL_SENDER_TO format: {e}")
         exit()
+    logger.info(f"FOGOS_EMAIL_SENDER_TO - {FOGOS_EMAIL_SENDER_TO}")
 
     # Main
     while True:
