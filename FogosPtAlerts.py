@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # !/usr/bin/python3
 
-import ast
 import datetime
 import json
 import logging
@@ -12,6 +11,7 @@ import re
 import time
 
 import requests
+from dotenv import load_dotenv
 
 
 def loadSavedInfo():
@@ -72,8 +72,8 @@ def getFogosInfo():
     usefulFogos = []
     for fogo in fogosJSON["data"]:
         distance = haversine_distance(CENTER_POINT, (fogo["lat"], fogo["lng"]))
-        isLocation = any(loc in fogo["location"] for loc in LOCATIONS)
-        if distance <= MAX_DISTANCE or isLocation:
+        isLocation = any(loc in fogo["location"] for loc in FOGOS_LOCATIONS)
+        if distance <= FOGOS_MAX_DISTANCE or isLocation:
             usefulFogos.append({
                 "id": int(fogo["id"]),
                 "datetime": datetime.datetime.strptime(f"{fogo['date']} {fogo['hour']}", "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
@@ -355,12 +355,18 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()])
     logger = logging.getLogger()
 
-    # Load Config File
-    configFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-    config = json.load(open(configFile))
-    MAX_DISTANCE = config["MAX_DISTANCE"]
-    CENTER_POINT = (config["CENTER_POINT"]["LAT"], config["CENTER_POINT"]["LONG"])
-    LOCATIONS = config["LOCATIONS"]
+    # Load .env file
+    load_dotenv()
+
+    # Read values from .env
+    try:
+        FOGOS_MAX_DISTANCE = float(os.getenv("FOGOS_MAX_DISTANCE", "0.0"))
+        CENTER_POINT = (float(os.getenv("FOGOS_CENTER_POINT_LAT")), float(os.getenv("FOGOS_CENTER_POINT_LONG")))
+        FOGOS_LOCATIONS = os.getenv("FOGOS_LOCATIONS", "").split(",")
+        FOGOS_LOCATIONS = [loc.strip() for loc in FOGOS_LOCATIONS if loc.strip()]
+    except Exception as _:
+        logger.error(f"Error loading .env values")
+        exit()
 
     # Load saved_info File
     savedInfoFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_info.json")
@@ -369,15 +375,19 @@ if __name__ == '__main__':
     EMAIL_SENDER_API_URL = "http://10.10.10.13:5500/send-email"
 
     # Get the environment variable FOGOS_EMAIL_SENDER_TO
-    FOGOS_EMAIL_SENDER_TO_raw = os.getenv("FOGOS_EMAIL_SENDER_TO", "['francgf@gmail.com']")
+    FOGOS_EMAIL_SENDER_TO = os.getenv("FOGOS_EMAIL_SENDER_TO", "francgf@gmail.com")
     try:
-        FOGOS_EMAIL_SENDER_TO = ast.literal_eval(FOGOS_EMAIL_SENDER_TO_raw)
-        if not isinstance(FOGOS_EMAIL_SENDER_TO, list):
-            raise ValueError("FOGOS_EMAIL_SENDER_TO is not a list.")
-    except (ValueError, SyntaxError) as e:
-        logger.error(f"Invalid FOGOS_EMAIL_SENDER_TO format: {e}")
+        FOGOS_EMAIL_SENDER_TO = os.getenv("FOGOS_EMAIL_SENDER_TO", "").split(",")
+        FOGOS_EMAIL_SENDER_TO = [loc.strip() for loc in FOGOS_EMAIL_SENDER_TO if loc.strip()]
+    except (ValueError, SyntaxError) as _:
+        logger.error(f"Invalid FOGOS_EMAIL_SENDER_TO format")
         exit()
     logger.info(f"FOGOS_EMAIL_SENDER_TO - {FOGOS_EMAIL_SENDER_TO}")
+
+    # Debug log for config
+    logger.info(f"FOGOS_MAX_DISTANCE = {FOGOS_MAX_DISTANCE}")
+    logger.info(f"CENTER_POINT = {CENTER_POINT}")
+    logger.info(f"FOGOS_LOCATIONS = {FOGOS_LOCATIONS}")
 
     # Main
     while True:

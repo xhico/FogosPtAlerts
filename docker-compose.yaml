@@ -6,5 +6,7 @@ services:
     image: "fogosptalerts:latest"
     hostname: "fogosptalerts.docker"
     restart: "unless-stopped"
-    environment:
-      - "FOGOS_EMAIL_SENDER_TO=${FOGOS_EMAIL_SENDER_TO}"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"      
+    env_file:
+      - "stack.env"
