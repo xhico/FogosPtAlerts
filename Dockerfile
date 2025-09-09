@@ -18,6 +18,3 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all remaining application files
 COPY . .
-
-# Command to run cron and keep the container running
-CMD ["python3", "FogosPtAlerts.py"]

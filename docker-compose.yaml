@@ -10,3 +10,4 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"      
     env_file:
       - "stack.env"
+    command: "python3 FogosPtAlerts.py"
