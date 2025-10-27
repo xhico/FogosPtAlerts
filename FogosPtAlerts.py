@@ -360,10 +360,11 @@ if __name__ == '__main__':
 
     # Read values from .env
     try:
-        FOGOS_MAX_DISTANCE = float(os.getenv("FOGOS_MAX_DISTANCE", "0.0"))
+        FOGOS_MAX_DISTANCE = float(os.getenv("FOGOS_MAX_DISTANCE"))
         CENTER_POINT = (float(os.getenv("FOGOS_CENTER_POINT_LAT")), float(os.getenv("FOGOS_CENTER_POINT_LONG")))
         FOGOS_LOCATIONS = os.getenv("FOGOS_LOCATIONS", "").split(",")
         FOGOS_LOCATIONS = [loc.strip() for loc in FOGOS_LOCATIONS if loc.strip()]
+        FOGOS_REFRESH_MIN = int(os.getenv("FOGOS_REFRESH_MIN"))
     except Exception as _:
         logger.error(f"Error loading .env values")
         exit()
@@ -388,6 +389,7 @@ if __name__ == '__main__':
     logger.info(f"FOGOS_MAX_DISTANCE = {FOGOS_MAX_DISTANCE}")
     logger.info(f"CENTER_POINT = {CENTER_POINT}")
     logger.info(f"FOGOS_LOCATIONS = {FOGOS_LOCATIONS}")
+    logger.info(f"FOGOS_REFRESH_MIN = {FOGOS_REFRESH_MIN}")
 
     # Main
     while True:
@@ -397,4 +399,5 @@ if __name__ == '__main__':
         except Exception as e:
             logger.exception(e)
         finally:
-            time.sleep(1 * 60)  # 1 min
+            logger.info(f"Sleeping for {FOGOS_REFRESH_MIN} minutes")
+            time.sleep(FOGOS_REFRESH_MIN * 60)
