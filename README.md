@@ -143,11 +143,11 @@ Updates to the same fire thread together via `In-Reply-To`/`References`, so one 
 
 ```bash
 pip install -r requirements.txt
-cp env.example .env   # then edit it; FOGOS_STATE_DIR=./data
+cp env.example stack.env   # then edit it; set FOGOS_STATE_DIR=./data
 python3 FogosPtAlerts.py
 ```
 
-`python-dotenv` is picked up automatically if installed, but is not required.
+If `python-dotenv` is installed, `stack.env` is loaded automatically (falling back to `.env`); otherwise export the variables yourself. Real environment variables always take precedence over the file, and neither file is required — `python-dotenv` is a convenience, not a dependency.
 
 ---
 

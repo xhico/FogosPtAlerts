@@ -91,12 +91,20 @@ SEVERITY_ORDER = ["info", "elevated", "major"]
 
 
 def _load_dotenv_if_present() -> None:
-    """Convenience for local runs. In Docker the env comes from env_file."""
+    """Convenience for local runs, so stack.env is the single config file.
+
+    In Docker the environment comes from the compose file, and real
+    environment variables always win over anything read here.
+    """
     try:
         from dotenv import load_dotenv  # type: ignore[import-not-found]
     except ImportError:
         return
-    load_dotenv()
+
+    for candidate in ("stack.env", ".env"):
+        if os.path.exists(candidate):
+            load_dotenv(candidate)
+            return
 
 
 def load() -> Config:
