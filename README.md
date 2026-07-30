@@ -51,7 +51,9 @@ The snapshot lives in `/data` on a named volume. If it were inside the container
 
 ## Quick start
 
-Deploy the stack and set the environment variables in your Docker UI — [env.example](env.example) is the annotated list of every variable. Nothing is baked into the compose file, so the same image works for any geofence.
+Deploy the stack and set the environment variables in your Docker UI. [docker-compose.yaml](docker-compose.yaml) declares every variable it understands in the form `${VAR:-default}`, so the compose file doubles as the reference: anything you set in the UI wins, anything you leave alone falls back to the default shown. [env.example](env.example) is the same list annotated, ready to copy into a `stack.env`.
+
+`EMAIL_TO` and `SMTP_HOST` have no default — leave them unset and the service exits at startup rather than pretending to work.
 
 On startup the service logs its full resolved configuration:
 

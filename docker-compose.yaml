@@ -6,6 +6,44 @@ services:
     restart: "unless-stopped"
     volumes:
       - "fogosptalerts-data:/data"
+    environment:
+
+      # ─── Where to watch ─────────────────────────────────────────────────────
+      # Radius in km around the centre point; 0 disables radius matching.
+      FOGOS_MAX_DISTANCE_KM: "${FOGOS_MAX_DISTANCE_KM:-0}"
+      # Centre point in decimal degrees. Also drives the distance and bearing
+      # shown on every alert, even when the radius itself is disabled.
+      FOGOS_CENTER_LAT: "${FOGOS_CENTER_LAT:-0}"
+      FOGOS_CENTER_LON: "${FOGOS_CENTER_LON:-0}"
+      # Comma-separated places always alerted on, regardless of distance.
+      FOGOS_LOCATIONS: "${FOGOS_LOCATIONS:-}"
+
+      # ─── How loud ───────────────────────────────────────────────────────────
+      FOGOS_POLL_MINUTES: "${FOGOS_POLL_MINUTES:-5}"
+      # info | elevated | major — threshold for NEW fires only.
+      FOGOS_MIN_SEVERITY: "${FOGOS_MIN_SEVERITY:-info}"
+      # Hours between "still watching" summaries; 0 disables them.
+      FOGOS_HEARTBEAT_HOURS: "${FOGOS_HEARTBEAT_HOURS:-24}"
+
+      # ─── Email ──────────────────────────────────────────────────────────────
+      # EMAIL_TO and SMTP_HOST are required; startup fails without them.
+      EMAIL_TO: "${EMAIL_TO:-}"
+      EMAIL_FROM: "${EMAIL_FROM:-}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_STARTTLS: "${SMTP_STARTTLS:-true}"
+      SMTP_SSL: "${SMTP_SSL:-false}"
+      SMTP_TIMEOUT: "${SMTP_TIMEOUT:-30}"
+
+      # ─── Runtime ────────────────────────────────────────────────────────────
+      # Must stay on the mounted volume, or restarts re-alert every active fire.
+      FOGOS_STATE_DIR: "${FOGOS_STATE_DIR:-/data}"
+      FOGOS_API_URL: "${FOGOS_API_URL:-https://api-dev.fogos.pt/new/fires}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      # true renders and logs emails without sending them.
+      FOGOS_DRY_RUN: "${FOGOS_DRY_RUN:-false}"
 
 volumes:
   fogosptalerts-data:
