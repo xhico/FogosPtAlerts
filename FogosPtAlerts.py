@@ -1,403 +1,199 @@
-# -*- coding: utf-8 -*-
-# !/usr/bin/python3
+"""Entry point: poll, diff, notify, repeat."""
 
-import datetime
-import json
+from __future__ import annotations
+
 import logging
-import math
-import os
-import random
-import re
+import signal
+import sys
+import threading
 import time
 
-import requests
-from dotenv import load_dotenv
+import httpx
+
+import config as config_module
+import fogos
+import render
+import state as state_module
+from changes import NEW, RESOLVED, UPDATE, Event, detect
+from config import VERSION, Config
+from mailer import MailError, Mailer
+
+logger = logging.getLogger("fogosptalerts")
+
+_shutdown = threading.Event()
 
 
-def loadSavedInfo():
-    if not os.path.exists(savedInfoFile):
-        with open(savedInfoFile, "w") as outFile:
-            json.dump([], outFile, indent=2)
-    with open(savedInfoFile, "r") as inFile:
-        return json.loads(inFile.read())
+def _setup_logging(level: str) -> None:
+    logging.basicConfig(
+        level=getattr(logging, level, logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+    )
+    # httpx logs every request at INFO; we already log the useful part of each
+    # cycle, and a 5-minute poll loop would otherwise emit a line forever.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
-def send_email_via_api(api_url, to, subject, html_message, attachments=None):
+def _handle_signal(signum, _frame) -> None:
+    logger.info("Received %s — finishing current cycle and exiting", signal.Signals(signum).name)
+    _shutdown.set()
+
+
+def _seed(cfg: Config, st: state_module.State, fires: list[fogos.Fire], mailer: Mailer) -> None:
+    """First run: adopt whatever is already burning without emailing about each one.
+
+    Otherwise a fresh container turns every in-progress occurrence into a
+    'new fire' alert, which is both alarming and wrong.
     """
-    Sends a POST request to the email-sending API with email details.
+    st.fires = {fire.id: fire for fire in fires}
+    st.first_seen = {fire.id: int(time.time()) for fire in fires}
+    st.initialized = True
 
-    Args:
-        api_url (str): Full URL to the /send-email endpoint (e.g. http://10.10.10.13:5000/send-email)
-        to (list[str]): List of recipient email addresses
-        subject (str): Email subject
-        html_message (str): HTML content of the email
-        attachments (list[dict], optional): List of attachments as dicts with 'filename', 'mimetype', and base64 'content'
-
-    Returns:
-        dict: Response JSON from the API
-    """
-    payload = {
-        "to": to,
-        "subject": subject,
-        "message": html_message,
-        "attachments": attachments or []
-    }
-
+    message = render.build_status_message(
+        cfg,
+        sorted(fires, key=lambda f: (f.is_cooling, -f.man)),
+        title="Monitorização iniciada",
+        note=(
+            f"O serviço arrancou (v{VERSION}) e adotou as ocorrências já em curso "
+            "sem gerar alertas individuais. A partir daqui recebe apenas novidades."
+        ),
+    )
     try:
-        response = requests.post(api_url, json=payload)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": str(e)}
+        mailer.send(message)
+    except MailError as exc:
+        logger.error("Startup email failed: %s", exc)
 
+    st.last_heartbeat = int(time.time())
+    logger.info("Seeded state with %d existing occurrence(s)", len(fires))
 
-def getFogosInfo():
-    """
-    Fetches and processes fire information from the Fogos API.
 
-    Returns:
-        list: A list of dictionaries containing useful fire information.
-    """
+def _dispatch(cfg: Config, st: state_module.State, events: list[Event], mailer: Mailer) -> set[str]:
+    """Send one email per event. Returns ids whose delivery failed."""
+    failed: set[str] = set()
 
-    logger.info("Getting Fogos JSON Info")
-    # Get Fogos JSON
-    fogosJSON = json.loads(requests.get("https://api-dev.fogos.pt/new/fires").content)
+    for event in events:
+        fire_id = event.fire.id
+        thread_root = st.thread_id(fire_id, mailer.domain)
+        is_root = event.kind == NEW
 
-    # Check if JSON is valid
-    if not fogosJSON["success"]:
-        logger.error("Failed to get Fogos JSON")
-        return False
-
-    # Get only useful info
-    usefulFogos = []
-    for fogo in fogosJSON["data"]:
-        distance = haversine_distance(CENTER_POINT, (fogo["lat"], fogo["lng"]))
-        isLocation = any(loc in fogo["location"] for loc in FOGOS_LOCATIONS)
-        if distance <= FOGOS_MAX_DISTANCE or isLocation:
-            usefulFogos.append({
-                "id": int(fogo["id"]),
-                "datetime": datetime.datetime.strptime(f"{fogo['date']} {fogo['hour']}", "%d-%m-%Y %H:%M").strftime("%Y-%m-%d %H:%M"),
-                "status": fogo["status"],
-                "district": fogo["district"],
-                "concelho": fogo["concelho"],
-                "freguesia": fogo["freguesia"],
-                "detailLocation": fogo["detailLocation"],
-                "distancia": distance,
-                "man": int(fogo["man"]),
-                "terrain": int(fogo["terrain"]),
-                "meios_aquaticos": int(fogo["meios_aquaticos"]),
-                "aerial": int(fogo["aerial"]),
-                "natureza": fogo["natureza"]
-            })
-
-    return usefulFogos
-
-
-def haversine_distance(coord1, coord2):
-    """
-    Calculate the haversine distance between two geographical coordinates.
-
-    Args:
-        coord1 (tuple): Latitude and longitude of the first point.
-        coord2 (tuple): Latitude and longitude of the second point.
-
-    Returns:
-        float: The distance in kilometers between the two coordinates.
-    """
-
-    # Coordinates are in (latitude, longitude) format
-    lat1, lon1 = coord1
-    lat2, lon2 = coord2
-
-    # Radius of the Earth in kilometers
-    earth_radius = 6371.0
-
-    # Convert latitude and longitude from degrees to radians
-    lat1_rad = math.radians(lat1)
-    lon1_rad = math.radians(lon1)
-    lat2_rad = math.radians(lat2)
-    lon2_rad = math.radians(lon2)
-
-    # Haversine formula
-    dlat = lat2_rad - lat1_rad
-    dlon = lon2_rad - lon1_rad
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    distance = earth_radius * c
-
-    return round(distance, 2)
-
-
-def find_new_entries(new_data, saved_data):
-    """
-    Compare new data with saved data and find entries that are not present in the saved data.
-
-    Args:
-        new_data (list): List of dictionaries containing new data entries.
-        saved_data (list): List of dictionaries containing saved data entries.
-
-    Returns:
-        list: A list of dictionaries representing new data entries that are not present in saved_data.
-    """
-
-    new_entries = []
-
-    for new_entry in new_data:
-        new_entry_id = new_entry["id"]
-        found = False
-
-        for saved_entry in saved_data:
-            if new_entry_id == saved_entry["id"]:
-                found = True
-                break
-
-        if not found:
-            new_entries.append(new_entry)
-
-    return new_entries
-
-
-def find_updated_entries(new_data, saved_data):
-    """
-    Compare new data with saved data and find entries with updated information.
-
-    Args:
-        new_data (list): List of dictionaries containing new data entries.
-        saved_data (list): List of dictionaries containing saved data entries.
-
-    Returns:
-        list: A list of dictionaries representing updated entries along with the updated keys and their old/new values.
-    """
-
-    updated_entries = []
-
-    for new_entry in new_data:
-        for saved_entry in saved_data:
-            if new_entry["id"] == saved_entry["id"]:
-                updated_keys = [
-                    {key: {"old": saved_entry[key], "new": new_entry[key]}}
-                    for key in new_entry
-                    if new_entry[key] != saved_entry[key]
-                ]
-                if updated_keys:
-                    updated_entries.append(
-                        {"new_entry": new_entry, "updated_keys": updated_keys}
-                    )
-
-    return updated_entries
-
-
-def find_deleted_entries(new_data, saved_data):
-    """
-    Compare new data with saved data and find entries that are present in saved data but not in new data.
-
-    Args:
-        new_data (list): List of dictionaries containing new data entries.
-        saved_data (list): List of dictionaries containing saved data entries.
-
-    Returns:
-        list: A list of dictionaries representing entries that are present in saved_data but not in new_data.
-    """
-
-    deleted_entries = []
-
-    for saved_entry in saved_data:
-        saved_entry_id = saved_entry["id"]
-        found = False
-
-        for new_entry in new_data:
-            if saved_entry_id == new_entry["id"]:
-                found = True
-                break
-
-        if not found:
-            deleted_entries.append(saved_entry)
-
-    return deleted_entries
-
-
-def translateKeys(fogo):
-    """
-    Translate keys of a fire dictionary to a new set of keys.
-
-    Args:
-        fogo (dict): A dictionary containing fire information with original keys.
-
-    Returns:
-        dict: A dictionary with translated keys.
-    """
-
-    # Translate keys and update the dictionary
-    fogo["Tipo de Alerta"] = fogo.pop("alertType")
-    fogo["ID"] = fogo.pop("id")
-    fogo["Data"] = fogo.pop("datetime")
-    fogo["Estado"] = fogo.pop("status")
-    fogo["Distrito"] = fogo.pop("district")
-    fogo["Concelho"] = fogo.pop("concelho")
-    fogo["Freguesia"] = fogo.pop("freguesia")
-    fogo["Local"] = fogo.pop("detailLocation")
-    fogo["Distância (KM)"] = fogo.pop("distancia")
-    fogo["Operacionais"] = fogo.pop("man")
-    fogo["Meios Terrestres"] = fogo.pop("terrain")
-    fogo["Meios Aquáticos"] = fogo.pop("meios_aquaticos")
-    fogo["Meios Aéreos"] = fogo.pop("aerial")
-    fogo["Natureza"] = fogo.pop("natureza")
-    fogo["URL"] = f"<a href='https://fogos.pt/fogo/{fogo['ID']}/detalhe?t={int(datetime.datetime.now().timestamp())}' target='_blank'>Link</a>"
-
-    # Convert every value to str
-    fogo = {key: str(value) for key, value in fogo.items()}
-
-    return fogo
-
-
-def custom_capitalize(input_string):
-    """
-    Capitalize the first letter of each word while preserving the case of other letters.
-
-    Args:
-        input_string (str): The input string to be processed.
-
-    Returns:
-        str: A new string with the first letter of each word capitalized while maintaining the case of the rest of the letters.
-    """
-
-    output_words = []
-    input_string = str(input_string)
-    words = input_string.split()
-
-    for word in words:
-        if word:
-            capitalized_word = word[0].upper() + word[1:]
-            output_words.append(capitalized_word)
-        else:
-            output_words.append('')
-
-    return ' '.join(output_words)
-
-
-def main():
-    """
-    Main function to monitor and send notifications for changes in fire information.
-
-    This function fetches live fire information, compares it with saved data,
-    detects new, deleted, and updated entries, and sends notification emails
-    for these changes.
-
-    Returns:
-        None
-    """
-
-    # Load Saved Fogos
-    saved_fogos = loadSavedInfo()
-
-    # Get Live fogos info
-    liveFogosInfo = getFogosInfo()
-
-    # Save liveFogosInfo
-    with open(savedInfoFile, "w") as outFile:
-        json.dump(liveFogosInfo, outFile, indent=2)
-
-    # Get differences
-    logger.info("Getting differences between live and saved JSON")
-    new_entries = find_new_entries(liveFogosInfo, saved_fogos)
-    deleted_entries = find_deleted_entries(liveFogosInfo, saved_fogos)
-    updated_entries = find_updated_entries(liveFogosInfo, saved_fogos)
-    changedFogos = {"new": new_entries, "deleted": deleted_entries, "updated": updated_entries}
-
-    # Send emails for changed fogos
-    for typeOf, entries in changedFogos.items():
-
-        # Iterate through each entry of the given type
-        for fogo in entries:
-
-            # Handle updated entries
-            if typeOf == "updated":
-                # Iterate through updated keys in the entry
-                for updatedKey in fogo["updated_keys"]:
-                    for key, values in updatedKey.items():
-                        # Format updated values with color highlighting
-                        fogo["new_entry"][key] = f"<span style='color: red;font-weight: bold;'>{values['old']}</span> / <span style='color: green;font-weight: bold;'>{values['new']}</span>"
-
-                # Update the entry to reflect the changes
-                fogo = fogo["new_entry"]
-
-            # Translate dictionary keys using the translateKeys function
-            fogo["alertType"] = "NOVO" if typeOf == "new" else "TERMINADO" if typeOf == "deleted" else "UPDATE"
-            fogo["alertType"] = f"<b style='color: red'>{fogo['alertType']}</b>"
-            fogo = translateKeys(fogo)
-
-            # Determine the subject based on the typeOf value
-            pattern = r"<span[^>]*>(.*?)<\/span>.*?<span[^>]*>(.*?)<\/span>"
-            subject = f"FOGO | {re.search(pattern, fogo['Freguesia']).group(2) if 'span' in fogo['Freguesia'] else fogo['Freguesia']} | {fogo['ID']}"
-
-            # Iterate over each key-value pair in the dictionary fogo
-            body = []
-            for key, val in fogo.items():
-                key = custom_capitalize(key)
-                val = custom_capitalize(val) if not val.startswith('https') else val
-                line = f"<b>{key}</b> - {val}<span style='color:#ffffff'>{random.randint(0, 10)}</span>"
-                body.append(line)
-
-            # Send the email using yagmail library
-            logger.info(f"Send email - {subject}")
-            response = send_email_via_api(
-                api_url=EMAIL_SENDER_API_URL,
-                to=FOGOS_EMAIL_SENDER_TO,
-                subject=subject,
-                html_message="<br>".join(body)
-            )
-            logger.info(response)
-
-
-if __name__ == '__main__':
-    # Set Logging
-    LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{os.path.abspath(__file__).replace('.py', '.log')}")
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()])
-    logger = logging.getLogger()
-
-    # Load .env file
-    load_dotenv()
-
-    # Read values from .env
-    try:
-        FOGOS_MAX_DISTANCE = float(os.getenv("FOGOS_MAX_DISTANCE"))
-        CENTER_POINT = (float(os.getenv("FOGOS_CENTER_POINT_LAT")), float(os.getenv("FOGOS_CENTER_POINT_LONG")))
-        FOGOS_LOCATIONS = os.getenv("FOGOS_LOCATIONS", "").split(",")
-        FOGOS_LOCATIONS = [loc.strip() for loc in FOGOS_LOCATIONS if loc.strip()]
-        FOGOS_REFRESH_MIN = int(os.getenv("FOGOS_REFRESH_MIN"))
-    except Exception as _:
-        logger.error(f"Error loading .env values")
-        exit()
-
-    # Load saved_info File
-    savedInfoFile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_info.json")
-
-    # Set EMAIL_SENDER_API_URL
-    EMAIL_SENDER_API_URL = "http://10.10.10.13:5500/send-email"
-
-    # Get the environment variable FOGOS_EMAIL_SENDER_TO
-    FOGOS_EMAIL_SENDER_TO = os.getenv("FOGOS_EMAIL_SENDER_TO", "francgf@gmail.com")
-    try:
-        FOGOS_EMAIL_SENDER_TO = os.getenv("FOGOS_EMAIL_SENDER_TO", "").split(",")
-        FOGOS_EMAIL_SENDER_TO = [loc.strip() for loc in FOGOS_EMAIL_SENDER_TO if loc.strip()]
-    except (ValueError, SyntaxError) as _:
-        logger.error(f"Invalid FOGOS_EMAIL_SENDER_TO format")
-        exit()
-    logger.info(f"FOGOS_EMAIL_SENDER_TO - {FOGOS_EMAIL_SENDER_TO}")
-
-    # Debug log for config
-    logger.info(f"FOGOS_MAX_DISTANCE = {FOGOS_MAX_DISTANCE}")
-    logger.info(f"CENTER_POINT = {CENTER_POINT}")
-    logger.info(f"FOGOS_LOCATIONS = {FOGOS_LOCATIONS}")
-    logger.info(f"FOGOS_REFRESH_MIN = {FOGOS_REFRESH_MIN}")
-
-    # Main
-    while True:
-        logger.info("----------------------------------------------------")
         try:
-            main()
-        except Exception as e:
-            logger.exception(e)
-        finally:
-            logger.info(f"Sleeping for {FOGOS_REFRESH_MIN} minutes")
-            time.sleep(FOGOS_REFRESH_MIN * 60)
+            mailer.send(render.build_message(event, cfg), thread_root=thread_root, is_root=is_root)
+        except MailError as exc:
+            logger.error("Could not notify %s for fire %s: %s", event.kind, fire_id, exc)
+            failed.add(fire_id)
+            continue
+
+        if event.kind == NEW:
+            st.first_seen.setdefault(fire_id, int(time.time()))
+
+    return failed
+
+
+def _maybe_heartbeat(cfg: Config, st: state_module.State, mailer: Mailer) -> None:
+    """Periodic 'still watching' email — silence must not be ambiguous."""
+    if cfg.heartbeat_hours <= 0:
+        return
+
+    now = int(time.time())
+    if now - st.last_heartbeat < cfg.heartbeat_hours * 3600:
+        return
+
+    tracked = sorted(st.fires.values(), key=lambda f: (f.is_cooling, -f.man))
+    message = render.build_status_message(
+        cfg,
+        tracked,
+        title="Tudo sob controlo",
+        note="Resumo periódico. O serviço está ativo e a monitorizar normalmente.",
+    )
+    try:
+        mailer.send(message)
+        st.last_heartbeat = now
+    except MailError as exc:
+        logger.error("Heartbeat email failed: %s", exc)
+
+
+def run_cycle(cfg: Config, client: httpx.Client, mailer: Mailer) -> None:
+    st = state_module.load(cfg.state_file)
+    fires = fogos.fetch(cfg, client)
+
+    if not st.initialized:
+        _seed(cfg, st, fires, mailer)
+        state_module.save(cfg.state_file, st)
+        return
+
+    events = detect(fires, st.fires, cfg.min_severity)
+    if events:
+        counts = {kind: sum(1 for e in events if e.kind == kind) for kind in (NEW, UPDATE, RESOLVED)}
+        logger.info("Changes: %d new, %d updated, %d resolved", *counts.values())
+
+    failed = _dispatch(cfg, st, events, mailer)
+
+    # Only track fires we have actually reported on, so an occurrence held back
+    # by FOGOS_MIN_SEVERITY still counts as new if it later escalates.
+    reported = {e.fire.id for e in events if e.kind in (NEW, UPDATE)}
+    next_fires: dict[str, fogos.Fire] = {}
+    for fire in fires:
+        if fire.id not in st.fires and fire.id not in reported:
+            continue
+        # A failed send leaves the old snapshot in place so the next cycle retries.
+        next_fires[fire.id] = st.fires[fire.id] if fire.id in failed and fire.id in st.fires else fire
+
+    # Keep resolved-but-unnotified fires around for another attempt.
+    for fire_id in failed:
+        if fire_id not in next_fires and fire_id in st.fires:
+            next_fires[fire_id] = st.fires[fire_id]
+
+    st.fires = next_fires
+    st.prune(set(next_fires))
+    _maybe_heartbeat(cfg, st, mailer)
+    state_module.save(cfg.state_file, st)
+
+
+def main() -> int:
+    try:
+        cfg = config_module.load()
+    except config_module.ConfigError as exc:
+        _setup_logging("INFO")
+        logger.error("Configuration error: %s", exc)
+        return 2
+
+    _setup_logging(cfg.log_level)
+    logger.info("FogosPT Alerts v%s", VERSION)
+    for line in config_module.describe(cfg):
+        logger.info("  %s", line)
+
+    mailer = Mailer(cfg.smtp, dry_run=cfg.dry_run)
+    if not mailer.verify():
+        logger.error("Refusing to start with a broken SMTP configuration")
+        return 3
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+    consecutive_failures = 0
+
+    with fogos.build_client() as client:
+        while not _shutdown.is_set():
+            try:
+                run_cycle(cfg, client, mailer)
+                consecutive_failures = 0
+            except fogos.FogosApiError as exc:
+                consecutive_failures += 1
+                logger.warning("Fogos API unavailable (attempt %d): %s", consecutive_failures, exc)
+            except Exception:
+                consecutive_failures += 1
+                logger.exception("Unhandled error during cycle")
+
+            # Back off after repeated failures, capped at ~4 cycles.
+            delay = cfg.poll_seconds * min(2 ** min(consecutive_failures, 2), 4)
+            logger.debug("Sleeping %ds", delay)
+            _shutdown.wait(delay)
+
+    logger.info("Stopped cleanly")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

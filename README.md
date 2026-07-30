@@ -1,124 +1,189 @@
 # FogosPT Alerts
 
-## Overview
+Watches the [fogos.pt](https://fogos.pt) occurrence feed (ANEPC civil-protection data) and emails you when a wildfire starts, changes materially, or ends near the places you care about.
 
-**FogosPT Alerts** is a Python-based monitoring tool that fetches live fire information from the [Fogos API](https://api-dev.fogos.pt/new/fires) and sends email notifications when new fires are detected, existing fires are updated, or fires are resolved. It is designed to run continuously, monitoring fire events around specified locations.
-
----
-
-## Features
-
-* Fetches live fire data from Fogos API.
-* Compares live data with previously saved data to detect new, updated, or deleted entries.
-* Sends email notifications for changes using an email-sending API.
-* Customizable monitored locations and alert radius.
-* Dockerized for easy deployment.
+Runs as a Docker service, published to GitHub Container Registry.
 
 ---
 
-## Requirements
+## How it works
 
-* Python 3.13+
-* `requests` library
-* `python-dotenv` for environment variable management
-* Docker (optional, for containerized deployment)
+Every cycle it fetches the live feed, keeps only occurrences inside your geofence, and compares them against the last snapshot on disk:
 
----
+| Event | When |
+| --- | --- |
+| **Novo incêndio** | An occurrence appears in your area for the first time |
+| **Atualização** | Its status changes, or its resources move meaningfully |
+| **Terminado** | It leaves the feed |
 
-## Setup
+"Meaningfully" is the important word. Resource counts jitter constantly — 20 operacionais becomes 21 and back again — and alerting on every delta makes the mailbox useless. An update is only sent when:
 
-### 1. Clone the repository
+- the **status** changes (*Em Curso* → *Em Resolução* → *Conclusão* → *Vigilância*), or
+- a resource type **crosses zero** — aircraft arriving or leaving is always news, or
+- a resource count moves by **at least 25% and at least 5 units**, or
+- the fire crosses a **severity band**.
 
-```bash
-git clone <repository_url>
-cd FogosPTAlerts
-```
+### Severity
 
-### 2. Create a `.env` file
+| Band | Meaning |
+| --- | --- |
+| `info` | Everything else inside the geofence |
+| `elevated` | 20+ operacionais, or any aircraft |
+| `major` | 50+ operacionais, or 2+ aircraft |
 
-The script reads configuration from a `.env` file. Example:
+Occurrences already winding down (*Em Resolução* onwards) never rate above `info`.
 
-```env
-FOGOS_MAX_DISTANCE=50
-FOGOS_CENTER_POINT_LAT=38.7169
-FOGOS_CENTER_POINT_LONG=-9.1397
-FOGOS_LOCATIONS=Lisbon,Sintra
-FOGOS_EMAIL_SENDER_TO=youremail@example.com
-```
+`FOGOS_MIN_SEVERITY` gates **new** fires only. Once a fire has been reported, its updates and resolution are always delivered — going quiet halfway through an incident is worse than never having started.
 
-### 3. Install dependencies
+### Silence is never ambiguous
 
-```bash
-pip install -r requirements.txt
-```
+A monitoring tool whose failure mode is silence is indistinguishable from one that has nothing to report. Three things guard against that:
 
-### 4. Run the script
+- a **heartbeat email** every `FOGOS_HEARTBEAT_HOURS` summarising what is being watched,
+- an **SMTP check at startup** — the service refuses to start on a broken mail config rather than failing silently later,
+- a **Docker healthcheck** that goes unhealthy if the state file stops being refreshed.
 
-```bash
-python3 FogosPtAlerts.py
-```
+### State survives restarts
 
-The script runs continuously, checking for fire updates every minute.
+The snapshot lives in `/data` on a named volume. If it were inside the container, every restart would re-alert every active fire. On the very first run the service adopts what is already burning and sends a single "monitorização iniciada" summary instead of one email per fire.
 
 ---
 
-## Docker Deployment
+## Quick start
 
-### Dockerfile
+Deploy the stack and set the environment variables in your Docker UI — [env.example](env.example) is the annotated list of every variable. Nothing is baked into the compose file, so the same image works for any geofence.
 
-The Dockerfile uses Python 3.13-slim, installs dependencies, and runs the script.
+On startup the service logs its full resolved configuration:
 
-### docker-compose.yml
-
-Example service configuration:
-
-```yaml
-services:
-  fogosptalerts:
-    container_name: "fogosptalerts"
-    image: "fogosptalerts:latest"
-    hostname: "fogosptalerts.docker"
-    restart: "unless-stopped"
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
-    env_file:
-      - "stack.env"
-    command: "python3 FogosPtAlerts.py"
+```
+FogosPT Alerts v2.0.0
+  Raio            : 15 km de (38.7223, -9.1393)
+  Localidades     : Sintra, Mafra
+  Intervalo       : 5 min
+  SMTP            : smtp.example.com:587 (STARTTLS)
+  Para            : you@example.com
 ```
 
-### Build and run Docker container
+Check that block first after any deploy — if a variable did not reach the container, it shows up here immediately rather than as mysteriously missing alerts later.
 
-```bash
-docker build -t fogosptalerts .
-docker-compose up -d
-```
+Do a dry run before pointing it at real mail: set `FOGOS_DRY_RUN=true` and the emails are rendered and logged instead of sent.
 
 ---
 
 ## Configuration
 
-* **FOGOS\_MAX\_DISTANCE**: Maximum distance (km) from `CENTER_POINT` to monitor fires.
-* **CENTER\_POINT\_LAT / CENTER\_POINT\_LONG**: Latitude and longitude for your monitoring center.
-* **FOGOS\_LOCATIONS**: Comma-separated list of locations to monitor regardless of distance.
-* **FOGOS\_EMAIL\_SENDER\_TO**: List of email addresses to receive alerts.
-* **EMAIL\_SENDER\_API\_URL**: URL of the API endpoint to send emails.
+All configuration is environment variables. See [env.example](env.example) for a commented template.
+
+### Where to watch
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FOGOS_MAX_DISTANCE_KM` | `0` | Radius around the centre point. `0` disables radius matching |
+| `FOGOS_CENTER_LAT` | `0` | Centre latitude |
+| `FOGOS_CENTER_LON` | `0` | Centre longitude |
+| `FOGOS_LOCATIONS` | — | Comma-separated places always alerted on, regardless of distance. Accent- and case-insensitive; matched against district, concelho, freguesia and locality |
+
+At least one of `FOGOS_MAX_DISTANCE_KM` or `FOGOS_LOCATIONS` must be set, or startup fails.
+
+### How loud
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FOGOS_POLL_MINUTES` | `5` | Minutes between polls (minimum `1`) |
+| `FOGOS_MIN_SEVERITY` | `info` | `info` \| `elevated` \| `major` — threshold for new fires |
+| `FOGOS_HEARTBEAT_HOURS` | `24` | Hours between summary emails; `0` disables |
+
+### Email
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `EMAIL_TO` | **required** | Comma-separated recipients |
+| `EMAIL_FROM` | `SMTP_USERNAME` | From address; `Name <addr@host>` is fine |
+| `SMTP_HOST` | **required** | SMTP server |
+| `SMTP_PORT` | `587`, or `465` with SSL | |
+| `SMTP_USERNAME` | — | Omit for an unauthenticated relay |
+| `SMTP_PASSWORD` | — | For Gmail, an [app password](https://support.google.com/accounts/answer/185833) |
+| `SMTP_STARTTLS` | `true` unless SSL | |
+| `SMTP_SSL` | `false` | Implicit TLS (port 465) |
+| `SMTP_TIMEOUT` | `30` | Seconds |
+
+### Runtime
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FOGOS_STATE_DIR` | `/data` | Must be a writable volume |
+| `FOGOS_API_URL` | `https://api-dev.fogos.pt/new/fires` | Override if upstream moves |
+| `LOG_LEVEL` | `INFO` | |
+| `FOGOS_DRY_RUN` | `false` | Render and log emails without sending |
 
 ---
 
-## Logging
+## Email design
 
-Logs are saved in the same directory as the script with the `.log` extension. The logs contain information about data fetching, differences detected, and emails sent.
+Subjects are front-loaded, because a phone notification cuts off around 40 characters and the whole point is triage without opening:
+
+```
+🔴 NOVO INCÊNDIO · Óbidos · A dos Negros · 80 op, 14 vt, 3 aéreos
+🔺 Vouzela · Meios aéreos no local (2)
+🔻 Bombarral · Em Resolução
+✅ Terminado · Óbidos · Serra d'El-Rei · durou 4h12
+```
+
+`🔺`/`🔻` say at a glance whether things got worse or better. Update subjects name *what changed* rather than repeating the location twice.
+
+Bodies are table-based with inline styles — the only layout that survives Gmail, Outlook and Apple Mail intact. Each carries a severity-coloured header, a "what changed" old → new block, a resource grid, full details, and links to fogos.pt and the map. A plain-text alternative is always included.
+
+Updates to the same fire thread together via `In-Reply-To`/`References`, so one incident is one conversation in your mailbox.
 
 ---
 
-## Notes
+## Running locally
 
-* Ensure the email-sending API is up and running.
-* Make sure your `.env` file is correctly formatted.
-* The script checks for updates every 1 minute by default.
+```bash
+pip install -r requirements.txt
+cp env.example .env   # then edit it; FOGOS_STATE_DIR=./data
+python3 FogosPtAlerts.py
+```
+
+`python-dotenv` is picked up automatically if installed, but is not required.
 
 ---
+
+## Container image
+
+Built and pushed to GHCR by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) on every push to `main` and every `v*.*.*` tag, for `linux/amd64` and `linux/arm64`.
+
+```
+ghcr.io/xhico/fogosptalerts:latest
+ghcr.io/xhico/fogosptalerts:1.2.3
+```
+
+The image runs as an unprivileged user; `/data` is the only writable path.
+
+---
+
+## Layout
+
+```
+FogosPtAlerts.py   entry point: poll loop, signals, backoff
+config.py          env parsing and validation
+fogos.py           API client, Fire model, geofencing, severity
+geo.py             haversine, bearing, accent-insensitive matching
+changes.py         meaningful-change detection
+state.py           atomic persisted snapshot
+render.py          subject lines and email bodies
+mailer.py          SMTP with per-fire threading
+```
+
+Nothing here is fire-specific below `fogos.py` — the *poll → geofence → diff → notify* shape works for any public feed.
+
+---
+
+## Caveats
+
+- Upstream is `api-dev.fogos.pt`, a development host. It can change without notice; `FOGOS_API_URL` exists for that day.
+- Alerts are **indicative**. In an emergency call **112**.
 
 ## License
 
-MIT License
+MIT

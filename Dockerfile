@@ -1,20 +1,34 @@
-# Use the latest Python image from Docker Hub
 FROM python:3.13-slim
-LABEL maintainer="xhico"
 
-# Clean and minimize image size — no extra packages needed
-RUN apt-get update \
-    && apt clean \
-    && apt autoclean \
-    && apt autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+LABEL org.opencontainers.image.title="FogosPT Alerts" \
+      org.opencontainers.image.description="Wildfire monitoring and email alerting for Portugal, built on the fogos.pt API" \
+      org.opencontainers.image.source="https://github.com/xhico/FogosPtAlerts" \
+      org.opencontainers.image.licenses="MIT" \
+      maintainer="xhico"
 
-# Set the working directory in the container
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    FOGOS_STATE_DIR=/data
+
 WORKDIR /app
 
-# Copy the project files and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
-# Copy all remaining application files
-COPY . .
+COPY *.py ./
+
+# Run unprivileged; /data is the only path that needs to be writable.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin fogos \
+    && mkdir -p /data \
+    && chown -R fogos:fogos /data /app
+USER fogos
+
+VOLUME ["/data"]
+
+# Unhealthy once the state file stops being refreshed — a stalled loop is the
+# failure mode that silence would otherwise hide.
+HEALTHCHECK --interval=5m --timeout=10s --start-period=2m --retries=3 \
+    CMD python3 -c "import os,sys,time; p=os.environ.get('FOGOS_STATE_DIR','/data')+'/state.json'; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p) < 3600 else 1)"
+
+ENTRYPOINT ["python3", "FogosPtAlerts.py"]

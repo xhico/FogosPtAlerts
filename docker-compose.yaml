@@ -1,12 +1,11 @@
 services:
 
-  # FogosPtAlerts
   fogosptalerts:
+    image: "ghcr.io/xhico/fogosptalerts:latest"
     container_name: "fogosptalerts"
-    image: "fogosptalerts:latest"
     restart: "unless-stopped"
-    env_file:
-      - "stack.env"
-    command: "python3 FogosPtAlerts.py"
-    labels:
-      - "wud.watch=false"
+    volumes:
+      - "fogosptalerts-data:/data"
+
+volumes:
+  fogosptalerts-data:
