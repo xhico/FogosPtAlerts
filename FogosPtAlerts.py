@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import signal
 import sys
 import threading
@@ -20,6 +21,10 @@ from mailer import MailError, Mailer
 
 logger = logging.getLogger("fogosptalerts")
 
+# Upper bound of the random buffer added to every sleep, as a fraction of the
+# configured interval. 0.25 turns a 1-minute poll into 60-75s.
+POLL_JITTER = 0.25
+
 _shutdown = threading.Event()
 
 
@@ -34,6 +39,21 @@ def _setup_logging(level: str) -> None:
     # cycle, and a 5-minute poll loop would otherwise emit a line forever.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+def _next_delay(base_seconds: int, consecutive_failures: int) -> int:
+    """Seconds to wait before the next cycle.
+
+    Two things happen here. Repeated failures back the interval off, capped at
+    four cycles. And every delay carries a random buffer on top, so the service
+    never settles into a fixed beat against the upstream API — a fleet of these
+    all polling on the exact same second is what gets an IP rate-limited.
+
+    The jitter is added, never subtracted, so the configured interval stays a
+    floor: FOGOS_POLL_MINUTES=1 polls every 60-75s, never faster.
+    """
+    delay = base_seconds * min(2 ** min(consecutive_failures, 2), 4)
+    return round(delay * (1 + random.uniform(0, POLL_JITTER)))
 
 
 def _handle_signal(signum, _frame) -> None:
@@ -186,8 +206,7 @@ def main() -> int:
                 consecutive_failures += 1
                 logger.exception("Unhandled error during cycle")
 
-            # Back off after repeated failures, capped at ~4 cycles.
-            delay = cfg.poll_seconds * min(2 ** min(consecutive_failures, 2), 4)
+            delay = _next_delay(cfg.poll_seconds, consecutive_failures)
             logger.debug("Sleeping %ds", delay)
             _shutdown.wait(delay)
 

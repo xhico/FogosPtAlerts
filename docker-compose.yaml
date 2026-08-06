@@ -19,7 +19,9 @@ services:
       FOGOS_LOCATIONS: "${FOGOS_LOCATIONS:-}"
 
       # ─── How loud ───────────────────────────────────────────────────────────
-      FOGOS_POLL_MINUTES: "${FOGOS_POLL_MINUTES:-5}"
+      # A floor, not an exact period: up to +25% of random buffer is added to
+      # every sleep, so 1 polls every 60-75s rather than on a fixed beat.
+      FOGOS_POLL_MINUTES: "${FOGOS_POLL_MINUTES:-1}"
       # info | elevated | major — threshold for NEW fires only.
       FOGOS_MIN_SEVERITY: "${FOGOS_MIN_SEVERITY:-info}"
       # Hours between "still watching" summaries; 0 disables them.

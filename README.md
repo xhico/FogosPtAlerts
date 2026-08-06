@@ -35,6 +35,10 @@ Occurrences already winding down (*Em Resolução* onwards) never rate above `in
 
 `FOGOS_MIN_SEVERITY` gates **new** fires only. Once a fire has been reported, its updates and resolution are always delivered — going quiet halfway through an incident is worse than never having started.
 
+### Polling is deliberately irregular
+
+`FOGOS_POLL_MINUTES` is a floor, not a period. Every sleep carries a random buffer of up to +25% on top, so the service never settles into a fixed beat against a third-party API that owes us nothing — and repeated failures back the interval off up to four cycles, jittered the same way. The jitter is only ever added, so the configured interval is never undershot.
+
 ### Silence is never ambiguous
 
 A monitoring tool whose failure mode is silence is indistinguishable from one that has nothing to report. Three things guard against that:
@@ -91,7 +95,7 @@ At least one of `FOGOS_MAX_DISTANCE_KM` or `FOGOS_LOCATIONS` must be set, or sta
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `FOGOS_POLL_MINUTES` | `5` | Minutes between polls (minimum `1`) |
+| `FOGOS_POLL_MINUTES` | `1` | Minimum minutes between polls. A random buffer of up to +25% is added to every sleep, so `1` polls every 60–75s rather than on a fixed beat |
 | `FOGOS_MIN_SEVERITY` | `info` | `info` \| `elevated` \| `major` — threshold for new fires |
 | `FOGOS_HEARTBEAT_HOURS` | `24` | Hours between summary emails; `0` disables |
 
