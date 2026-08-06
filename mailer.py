@@ -57,7 +57,11 @@ class Mailer:
         mail = EmailMessage()
         mail["Subject"] = message.subject
         mail["From"] = self.config.sender
-        mail["To"] = ", ".join(self.config.recipients)
+        # Recipients go in Bcc, which send_message() strips before transmitting,
+        # so the delivered copy names only the sender and nobody learns who else
+        # is on the list. Delivery itself is driven by the explicit envelope below.
+        mail["To"] = self.config.sender
+        mail["Bcc"] = ", ".join(self.config.recipients)
         mail["Date"] = formatdate(localtime=True)
         mail["Auto-Submitted"] = "auto-generated"
         mail["X-Mailer"] = "FogosPtAlerts"
@@ -74,12 +78,17 @@ class Mailer:
         mail.add_alternative(message.html_body, subtype="html")
 
         if self.dry_run:
-            logger.info("[dry-run] would send %r to %s", message.subject, mail["To"])
+            logger.info(
+                "[dry-run] would send %r to %s", message.subject, ", ".join(self.config.recipients)
+            )
             return
 
         try:
             with self._connect() as server:
-                server.send_message(mail)
+                # Pass the envelope explicitly: left to itself send_message()
+                # derives it from To + Cc + Bcc, which would deliver twice to
+                # whoever is both a recipient and the sender.
+                server.send_message(mail, to_addrs=self.config.recipients)
         except (smtplib.SMTPException, OSError, ssl.SSLError) as exc:
             raise MailError(f"SMTP delivery failed: {exc}") from exc
 
