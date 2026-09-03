@@ -39,6 +39,12 @@ services:
       SMTP_SSL: "${SMTP_SSL:-false}"
       SMTP_TIMEOUT: "${SMTP_TIMEOUT:-30}"
 
+      # ─── fogos.pt API ───────────────────────────────────────────────────────
+      # Sent as the X-API-Key header; empty means anonymous calls.
+      FOGOS_API_KEY: "${FOGOS_API_KEY:-}"
+      # Must match the User-Agent declared on the API access request.
+      FOGOS_USER_AGENT: "${FOGOS_USER_AGENT:-FogosPtAlerts/2.0 (+https://github.com/xhico/FogosPtAlerts)}"
+
       # ─── Runtime ────────────────────────────────────────────────────────────
       # Must stay on the mounted volume, or restarts re-alert every active fire.
       FOGOS_STATE_DIR: "${FOGOS_STATE_DIR:-/data}"

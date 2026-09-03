@@ -55,7 +55,7 @@ The snapshot lives in `/data` on a named volume. If it were inside the container
 
 ## Quick start
 
-Deploy the stack and set the environment variables in your Docker UI. [docker-compose.yaml](docker-compose.yaml) declares every variable it understands in the form `${VAR:-default}`, so the compose file doubles as the reference: anything you set in the UI wins, anything you leave alone falls back to the default shown. [env.example](env.example) is the same list annotated, ready to copy into a `stack.env`.
+Deploy the stack and set the environment variables in your Docker UI. [docker-compose.yaml](docker-compose.yaml) declares every variable it understands in the form `${VAR:-default}`, so the compose file doubles as the reference: anything you set in the UI wins, anything you leave alone falls back to the default shown. [env.example](env.example) is the same list annotated, ready to copy into a `.env`.
 
 `EMAIL_TO` and `SMTP_HOST` have no default — leave them unset and the service exits at startup rather than pretending to work.
 
@@ -119,6 +119,8 @@ At least one of `FOGOS_MAX_DISTANCE_KM` or `FOGOS_LOCATIONS` must be set, or sta
 | --- | --- | --- |
 | `FOGOS_STATE_DIR` | `/data` | Must be a writable volume |
 | `FOGOS_API_URL` | `https://api-dev.fogos.pt/new/fires` | Override if upstream moves |
+| `FOGOS_API_KEY` | — | Access key, sent as the `X-API-Key` header. Empty calls the API anonymously, which is now rate-limited |
+| `FOGOS_USER_AGENT` | `FogosPtAlerts/2.0 (+…)` | Must match the User-Agent declared on your API access request |
 | `LOG_LEVEL` | `INFO` | |
 | `FOGOS_DRY_RUN` | `false` | Render and log emails without sending |
 
@@ -147,11 +149,11 @@ Updates to the same fire thread together via `In-Reply-To`/`References`, so one 
 
 ```bash
 pip install -r requirements.txt
-cp env.example stack.env   # then edit it; set FOGOS_STATE_DIR=./data
+cp env.example .env   # then edit it; set FOGOS_STATE_DIR=./data
 python3 FogosPtAlerts.py
 ```
 
-If `python-dotenv` is installed, `stack.env` is loaded automatically (falling back to `.env`); otherwise export the variables yourself. Real environment variables always take precedence over the file, and neither file is required — `python-dotenv` is a convenience, not a dependency.
+If `python-dotenv` is installed, `.env` is loaded automatically (falling back to `stack.env`); otherwise export the variables yourself. Real environment variables always take precedence over the file, and neither file is required — `python-dotenv` is a convenience, not a dependency.
 
 ---
 
@@ -188,6 +190,7 @@ Nothing here is fire-specific below `fogos.py` — the *poll → geofence → di
 ## Caveats
 
 - Upstream is `api-dev.fogos.pt`, a development host. It can change without notice; `FOGOS_API_URL` exists for that day.
+- Anonymous requests are rate-limited (HTTP 429). Request a key at [fogos.pt](https://fogos.pt) and set `FOGOS_API_KEY`; a rejected key returns 403 rather than 429.
 - Alerts are **indicative**. In an emergency call **112**.
 
 ## License

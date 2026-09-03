@@ -14,8 +14,6 @@ from geo import bearing_label, haversine_km, normalize
 
 logger = logging.getLogger(f"fogosptalerts.{__name__}")
 
-USER_AGENT = "FogosPtAlerts/2.0 (+https://github.com/xhico/FogosPtAlerts)"
-
 # Generous read budget — the upstream payload carries KML polygons and is slow
 # to serialise, but a hung connect should fail fast so the loop can back off.
 TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
@@ -202,13 +200,12 @@ def _build(raw: dict, config: Config) -> Fire | None:
     )
 
 
-def build_client() -> httpx.Client:
+def build_client(config: Config) -> httpx.Client:
     """Long-lived client — keeps the connection pool warm across cycles."""
-    return httpx.Client(
-        timeout=TIMEOUT,
-        follow_redirects=True,
-        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-    )
+    headers = {"User-Agent": config.user_agent, "Accept": "application/json"}
+    if config.api_key:
+        headers["X-API-Key"] = config.api_key
+    return httpx.Client(timeout=TIMEOUT, follow_redirects=True, headers=headers)
 
 
 def fetch(config: Config, client: httpx.Client) -> list[Fire]:

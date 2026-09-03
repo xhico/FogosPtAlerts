@@ -9,6 +9,10 @@ from geo import normalize
 
 VERSION = "2.0.0"
 
+# Declared to fogos.pt on the API access request, so it must not drift from
+# whatever was submitted there — the operator matches requests against it.
+DEFAULT_USER_AGENT = "FogosPtAlerts/2.0 (+https://github.com/xhico/FogosPtAlerts)"
+
 
 class ConfigError(Exception):
     """Raised when the environment is missing or malformed."""
@@ -73,6 +77,8 @@ class Config:
     heartbeat_hours: float
     state_dir: str
     api_url: str
+    api_key: str
+    user_agent: str
     log_level: str
     smtp: SmtpConfig
     dry_run: bool
@@ -91,7 +97,7 @@ SEVERITY_ORDER = ["info", "elevated", "major"]
 
 
 def _load_dotenv_if_present() -> None:
-    """Convenience for local runs, so stack.env is the single config file.
+    """Convenience for local runs, so .env is the single config file.
 
     In Docker the environment comes from the compose file, and real
     environment variables always win over anything read here.
@@ -101,7 +107,7 @@ def _load_dotenv_if_present() -> None:
     except ImportError:
         return
 
-    for candidate in ("stack.env", ".env"):
+    for candidate in (".env", "stack.env"):
         if os.path.exists(candidate):
             load_dotenv(candidate)
             return
@@ -171,6 +177,8 @@ def load() -> Config:
         heartbeat_hours=_float("FOGOS_HEARTBEAT_HOURS", 24.0),
         state_dir=_raw("FOGOS_STATE_DIR", "/data") or "/data",
         api_url=_raw("FOGOS_API_URL", "https://api-dev.fogos.pt/new/fires") or "",
+        api_key=_raw("FOGOS_API_KEY", "") or "",
+        user_agent=_raw("FOGOS_USER_AGENT", DEFAULT_USER_AGENT) or DEFAULT_USER_AGENT,
         log_level=(_raw("LOG_LEVEL", "INFO") or "INFO").upper(),
         smtp=smtp,
         dry_run=dry_run,
@@ -187,6 +195,9 @@ def describe(config: Config) -> list[str]:
         f"Severidade min. : {config.min_severity}",
         f"Heartbeat       : {f'{config.heartbeat_hours:g}h' if config.heartbeat_hours > 0 else 'desativado'}",
         f"Estado          : {config.state_file}",
+        f"User-Agent      : {config.user_agent}",
+        # Never log the key itself, only whether one is in play.
+        f"X-API-Key       : {'configurada' if config.api_key else 'não definida'}",
         f"SMTP            : {config.smtp.host}:{config.smtp.port} "
         f"({'SSL' if config.smtp.use_ssl else 'STARTTLS' if config.smtp.use_starttls else 'plain'})",
         f"De              : {config.smtp.sender}",

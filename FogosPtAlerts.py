@@ -194,7 +194,7 @@ def main() -> int:
 
     consecutive_failures = 0
 
-    with fogos.build_client() as client:
+    with fogos.build_client(cfg) as client:
         while not _shutdown.is_set():
             try:
                 run_cycle(cfg, client, mailer)
