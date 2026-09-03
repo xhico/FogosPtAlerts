@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from geo import normalize
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 # Declared to fogos.pt on the API access request, so it must not drift from
 # whatever was submitted there — the operator matches requests against it.

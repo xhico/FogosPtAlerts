@@ -74,7 +74,7 @@ Deploy the stack and set the environment variables in your Docker UI. [docker-co
 On startup the service logs its full resolved configuration:
 
 ```
-FogosPT Alerts v2.0.0
+FogosPT Alerts v2.1.0
   Raio            : 15 km de (38.7223, -9.1393)
   Localidades     : Sintra, Mafra
   Intervalo       : 5 min
