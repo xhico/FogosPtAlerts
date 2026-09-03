@@ -263,10 +263,12 @@ def build_message(event: Event, config: Config) -> Message:
     )
 
 
-def build_status_message(config: Config, tracked: list[Fire], title: str, note: str) -> Message:
-    """Heartbeat / startup email: proof the watcher is alive and what it sees."""
+def build_status_message(
+    config: Config, tracked: list[Fire], title: str, note: str, icon: str = "📋"
+) -> Message:
+    """Heartbeat / startup / upstream-health email: proof the watcher is alive."""
     active = [fire for fire in tracked if not fire.is_cooling]
-    subject = f"📋 {title} · {len(active)} ativo(s), {len(tracked)} em vigilância"
+    subject = f"{icon} {title} · {len(active)} ativo(s), {len(tracked)} em vigilância"
 
     if tracked:
         rows = "".join(

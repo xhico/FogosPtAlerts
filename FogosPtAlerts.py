@@ -25,6 +25,10 @@ logger = logging.getLogger("fogosptalerts")
 # configured interval. 0.25 turns a 1-minute poll into 60-75s.
 POLL_JITTER = 0.25
 
+# Consecutive upstream failures before an outage is worth an email. The dev API
+# blips; with backoff this is roughly 7 minutes of sustained trouble.
+OUTAGE_ALERT_AFTER_FAILURES = 3
+
 _shutdown = threading.Event()
 
 
@@ -111,8 +115,25 @@ def _dispatch(cfg: Config, st: state_module.State, events: list[Event], mailer: 
     return failed
 
 
+def _tracked(st: state_module.State) -> list[fogos.Fire]:
+    return sorted(st.fires.values(), key=lambda f: (f.is_cooling, -f.man))
+
+
+def _elapsed(since: int) -> str:
+    minutes = max(0, int(time.time()) - since) // 60
+    hours, minutes = divmod(minutes, 60)
+    if hours >= 24:
+        days, hours = divmod(hours, 24)
+        return f"{days}d {hours}h"
+    return f"{hours}h{minutes:02d}" if hours else f"{minutes} min"
+
+
 def _maybe_heartbeat(cfg: Config, st: state_module.State, mailer: Mailer) -> None:
-    """Periodic 'still watching' email — silence must not be ambiguous."""
+    """Periodic 'still watching' email — silence must not be ambiguous.
+
+    Runs whether or not the upstream fetch succeeded: an outage is exactly
+    when a reader most needs proof the service itself is still alive.
+    """
     if cfg.heartbeat_hours <= 0:
         return
 
@@ -120,28 +141,106 @@ def _maybe_heartbeat(cfg: Config, st: state_module.State, mailer: Mailer) -> Non
     if now - st.last_heartbeat < cfg.heartbeat_hours * 3600:
         return
 
-    tracked = sorted(st.fires.values(), key=lambda f: (f.is_cooling, -f.man))
-    message = render.build_status_message(
-        cfg,
-        tracked,
-        title="Tudo sob controlo",
-        note="Resumo periódico. O serviço está ativo e a monitorizar normalmente.",
-    )
+    if st.in_outage:
+        title, icon = "Ativo, mas sem contacto com a API", "⚠️"
+        note = (
+            f"O serviço está a correr normalmente, mas não consegue contactar a API "
+            f"do fogos.pt há {_elapsed(st.outage_since)}. As ocorrências abaixo são o "
+            "último estado conhecido e podem estar desatualizadas."
+        )
+    else:
+        title, icon = "Tudo sob controlo", "📋"
+        note = "Resumo periódico. O serviço está ativo e a monitorizar normalmente."
+
     try:
-        mailer.send(message)
+        mailer.send(render.build_status_message(cfg, _tracked(st), title, note, icon))
         st.last_heartbeat = now
     except MailError as exc:
         logger.error("Heartbeat email failed: %s", exc)
 
 
-def run_cycle(cfg: Config, client: httpx.Client, mailer: Mailer) -> None:
+def _note_failure(cfg: Config, st: state_module.State, mailer: Mailer, reason: str) -> None:
+    """Record an upstream failure, emailing once when it becomes a real outage.
+
+    A single failed poll is noise — the dev API blips. Only after
+    OUTAGE_ALERT_AFTER_FAILURES consecutive failures (roughly 7 minutes once
+    backoff is applied) is one email sent, and no more until it recovers.
+    """
+    now = int(time.time())
+    if not st.in_outage:
+        st.outage_since = now
+    st.outage_failures += 1
+
+    if st.outage_notified or st.outage_failures < OUTAGE_ALERT_AFTER_FAILURES:
+        return
+
+    note = (
+        f"O serviço está a correr, mas falhou {st.outage_failures} tentativas seguidas "
+        f"de contactar a API do fogos.pt (desde há {_elapsed(st.outage_since)}).\n\n"
+        f"Último erro: {reason}\n\n"
+        "Continuará a tentar, com intervalos progressivamente maiores, e receberá "
+        "novo aviso quando o contacto for restabelecido. As ocorrências abaixo são o "
+        "último estado conhecido."
+    )
+    try:
+        mailer.send(
+            render.build_status_message(
+                cfg, _tracked(st), "API do fogos.pt inacessível", note, "⚠️"
+            )
+        )
+        st.outage_notified = True
+    except MailError as exc:
+        logger.error("Outage email failed: %s", exc)
+
+
+def _note_recovery(cfg: Config, st: state_module.State, mailer: Mailer) -> None:
+    """Clear outage state, emailing once only if we announced the outage."""
+    if not st.in_outage:
+        return
+
+    announced, downtime = st.outage_notified, _elapsed(st.outage_since)
+    st.outage_since = st.outage_failures = 0
+    st.outage_notified = False
+
+    if not announced:
+        logger.info("Upstream recovered after a brief blip — no email sent")
+        return
+
+    note = (
+        f"O contacto com a API do fogos.pt foi restabelecido após {downtime} "
+        "de indisponibilidade. A monitorização voltou ao normal."
+    )
+    try:
+        mailer.send(
+            render.build_status_message(cfg, _tracked(st), "API novamente acessível", note, "✅")
+        )
+    except MailError as exc:
+        logger.error("Recovery email failed: %s", exc)
+
+
+def run_cycle(cfg: Config, client: httpx.Client, mailer: Mailer) -> bool:
+    """Run one full cycle. Returns False if the upstream fetch failed.
+
+    Upstream errors are handled here rather than raised, so the heartbeat and
+    the state write still happen during an outage.
+    """
     st = state_module.load(cfg.state_file)
-    fires = fogos.fetch(cfg, client)
+
+    try:
+        fires = fogos.fetch(cfg, client)
+    except fogos.FogosApiError as exc:
+        logger.warning("Fogos API unavailable: %s", exc)
+        _note_failure(cfg, st, mailer, str(exc))
+        _maybe_heartbeat(cfg, st, mailer)
+        state_module.save(cfg.state_file, st)
+        return False
+
+    _note_recovery(cfg, st, mailer)
 
     if not st.initialized:
         _seed(cfg, st, fires, mailer)
         state_module.save(cfg.state_file, st)
-        return
+        return True
 
     events = detect(fires, st.fires, cfg.min_severity)
     if events:
@@ -169,6 +268,7 @@ def run_cycle(cfg: Config, client: httpx.Client, mailer: Mailer) -> None:
     st.prune(set(next_fires))
     _maybe_heartbeat(cfg, st, mailer)
     state_module.save(cfg.state_file, st)
+    return True
 
 
 def main() -> int:
@@ -197,11 +297,9 @@ def main() -> int:
     with fogos.build_client(cfg) as client:
         while not _shutdown.is_set():
             try:
-                run_cycle(cfg, client, mailer)
-                consecutive_failures = 0
-            except fogos.FogosApiError as exc:
-                consecutive_failures += 1
-                logger.warning("Fogos API unavailable (attempt %d): %s", consecutive_failures, exc)
+                # run_cycle handles upstream errors itself so the heartbeat
+                # still fires during an outage; it reports health as a bool.
+                consecutive_failures = 0 if run_cycle(cfg, client, mailer) else consecutive_failures + 1
             except Exception:
                 consecutive_failures += 1
                 logger.exception("Unhandled error during cycle")

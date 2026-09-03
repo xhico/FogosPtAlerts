@@ -28,6 +28,15 @@ class State:
     last_heartbeat: int = 0
     initialized: bool = False
 
+    # Upstream health, persisted so a restart mid-outage does not re-notify.
+    outage_since: int = 0
+    outage_failures: int = 0
+    outage_notified: bool = False
+
+    @property
+    def in_outage(self) -> bool:
+        return self.outage_since > 0
+
     def thread_id(self, fire_id: str, domain: str) -> str:
         """Stable Message-ID for a fire, so mail clients group its updates."""
         return self.threads.setdefault(fire_id, f"<fogo-{fire_id}@{domain}>")
@@ -67,6 +76,9 @@ def load(path: str) -> State:
         first_seen={k: int(v) for k, v in (raw.get("first_seen") or {}).items()},
         threads=dict(raw.get("threads") or {}),
         last_heartbeat=int(raw.get("last_heartbeat") or 0),
+        outage_since=int(raw.get("outage_since") or 0),
+        outage_failures=int(raw.get("outage_failures") or 0),
+        outage_notified=bool(raw.get("outage_notified")),
         initialized=bool(raw.get("initialized")),
     )
 
@@ -78,6 +90,9 @@ def save(path: str, state: State) -> None:
         "initialized": state.initialized,
         "updated_at": int(time.time()),
         "last_heartbeat": state.last_heartbeat,
+        "outage_since": state.outage_since,
+        "outage_failures": state.outage_failures,
+        "outage_notified": state.outage_notified,
         "first_seen": state.first_seen,
         "threads": state.threads,
         "fires": {fire_id: fire.to_dict() for fire_id, fire in state.fires.items()},

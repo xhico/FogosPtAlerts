@@ -41,11 +41,23 @@ Occurrences already winding down (*Em Resolução* onwards) never rate above `in
 
 ### Silence is never ambiguous
 
-A monitoring tool whose failure mode is silence is indistinguishable from one that has nothing to report. Three things guard against that:
+A monitoring tool whose failure mode is silence is indistinguishable from one that has nothing to report. Four things guard against that:
 
 - a **heartbeat email** every `FOGOS_HEARTBEAT_HOURS` summarising what is being watched,
 - an **SMTP check at startup** — the service refuses to start on a broken mail config rather than failing silently later,
-- a **Docker healthcheck** that goes unhealthy if the state file stops being refreshed.
+- a **Docker healthcheck** that goes unhealthy if the state file stops being refreshed,
+- **upstream outage alerts**, described below.
+
+### Upstream outages are reported, once
+
+If the fogos.pt API stops answering, no fires are detected — which looks exactly like a quiet day. So the service tracks upstream health separately from fire activity:
+
+- after **3 consecutive failures** (roughly 7 minutes once backoff is applied) it sends **one** ⚠️ email and then stays quiet, however long the outage lasts,
+- when the API answers again it sends **one** ✅ email with the total downtime,
+- a shorter blip sends nothing at all — no outage email means no recovery email either,
+- the **heartbeat still fires during an outage**, reworded to say the service is alive but out of contact, and listing the last known state.
+
+Outage state is persisted, so restarting mid-outage does not restart the notification sequence. The Docker healthcheck deliberately stays green throughout: the container is healthy, the upstream is not, and restarting the container would not fix it.
 
 ### State survives restarts
 
